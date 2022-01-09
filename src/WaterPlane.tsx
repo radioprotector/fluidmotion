@@ -190,7 +190,7 @@ function WaterPlane(): JSX.Element {
         });
 
         // Now update the source buffer at this index to reflect the depth change
-        sourceBuffer.current.setZ(nearestVertexIdx, MAX_Z_DEPTH);
+        sourceBuffer.current.setZ(nearestVertexIdx, MIN_Z_DEPTH);
         e.stopPropagation();
       }
     }
@@ -203,7 +203,7 @@ function WaterPlane(): JSX.Element {
       onPointerDown={onPointerDown}
     >
       <primitive object={waterGeometry.current} attach="geometry" />
-      <meshPhongMaterial color={0x7777ff} flatShading={true} shininess={0} vertexColors={true} />
+      <meshPhongMaterial color={0x7777ff} flatShading={true} shininess={1} vertexColors={true} />
     </mesh>
   );
 }
