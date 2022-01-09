@@ -10,7 +10,7 @@ function App(): JSX.Element {
       <Canvas>
         <ambientLight intensity={1} />
         <WaterPlane />
-        <axesHelper args={[10]} />
+        {/* <axesHelper args={[10]} /> */}
       </Canvas>
     </div>
   );
