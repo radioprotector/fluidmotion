@@ -2,12 +2,20 @@ import { ThreeEvent, useFrame } from "@react-three/fiber";
 import { useRef } from "react";
 import { Mesh, PlaneGeometry, BufferGeometry, BufferAttribute, MathUtils } from "three";
 
-const NUM_ROWS = 128;
-const NUM_COLUMNS = 128;
+// These two values control the number of vertices that will be in the plane - 256x256 will result in 65,536 vertices
+const NUM_ROWS = 256;
+const NUM_COLUMNS = 256;
+
+// Track the minimum/maximum Z values for each vertex, and set the starting depth to their average
 const MIN_Z_DEPTH = -1.0;
 const MAX_Z_DEPTH = 1.0;
-const BASE_Z_DEPTH = (MAX_Z_DEPTH - MIN_Z_DEPTH) / 2.0;
+const BASE_Z_DEPTH = (MAX_Z_DEPTH + MIN_Z_DEPTH) / 2.0;
+const WAVE_DAMPING = 127/128;
 
+/**
+ * Applies coloring to each vertex in the geometry based on its z-depth.
+ * @param geometry The buffer geometry that contains position and color data.
+ */
 function updateVertexColoring(geometry: BufferGeometry) {
   const vertexPositions = geometry.attributes.position;
   const vertexColors = geometry.attributes.color;
@@ -23,7 +31,12 @@ function updateVertexColoring(geometry: BufferGeometry) {
   vertexColors.needsUpdate = true;
 }
 
-// https://web.archive.org/web/20100224054436/http://www.gamedev.net/reference/programming/features/water/page2.asp
+/**
+ * Updates the z-depth of all vertices in the render buffer attribute to reflect its adjacent vertices.
+ * @param sourcePositions The buffer attribute of vertex positions that will be used as sources.
+ * @param renderPositions The buffer attribute of vertex positions that will be rendered.
+ * @see {@link https://web.archive.org/web/20100224054436/http://www.gamedev.net/reference/programming/features/water/page2.asp}
+ */
 function updateVertexDepth(sourcePositions: BufferAttribute, renderPositions: BufferAttribute) {
   const vertexCount = sourcePositions.count;
 
@@ -44,15 +57,6 @@ function updateVertexDepth(sourcePositions: BufferAttribute, renderPositions: Bu
       const aboveIdx = vertexIdx - NUM_COLUMNS;
 
       adjacentTotal += sourcePositions.getZ(aboveIdx);
-
-      // // Also check upper-left and upper-right
-      // if (columnIdx > 0) {
-      //   adjacentTotal += sourcePositions.getZ(aboveIdx - 1);
-      // }
-
-      // if (columnIdx < NUM_COLUMNS - 1) {
-      //   adjacentTotal += sourcePositions.getZ(aboveIdx + 1);
-      // }
     }
 
     // Pull from the row below if possible
@@ -60,15 +64,6 @@ function updateVertexDepth(sourcePositions: BufferAttribute, renderPositions: Bu
       const belowIdx = vertexIdx + NUM_COLUMNS;
 
       adjacentTotal += sourcePositions.getZ(belowIdx);
-
-      // // Also check lower-left and lower-right
-      // if (columnIdx > 0) {
-      //   adjacentTotal += sourcePositions.getZ(belowIdx - 1);
-      // }
-      
-      // if (columnIdx < NUM_COLUMNS - 1) {
-      //   adjacentTotal += sourcePositions.getZ(belowIdx + 1);
-      // }
     }
 
     // Pull from the column on the left if possible
@@ -85,12 +80,12 @@ function updateVertexDepth(sourcePositions: BufferAttribute, renderPositions: Bu
     let newZValue = MathUtils.clamp((adjacentTotal / 2.0) - renderPositions.getZ(vertexIdx), MIN_Z_DEPTH, MAX_Z_DEPTH);
 
     // Apply damping
-    newZValue *= 63/64;
+    newZValue *= WAVE_DAMPING;
 
     // Debug out-of-range values
     if (process.env.NODE_ENV !== 'production') {
       if (Number.isNaN(newZValue)) {
-        console.debug(`NaN value for ${vertexIdx} at row ${rowIdx} col ${columnIdx}`);
+        //console.debug(`NaN value for ${vertexIdx} at row ${rowIdx} col ${columnIdx}`);
         newZValue = BASE_Z_DEPTH;
       }
     }
@@ -102,25 +97,25 @@ function updateVertexDepth(sourcePositions: BufferAttribute, renderPositions: Bu
   renderPositions.needsUpdate = true;
 }
 
-// https://github.com/mrdoob/three.js/blob/master/examples/webgl_geometry_colors.html
+/**
+ * Creates a buffer geometry to represent the water plane, with an additional vertex-specific color buffer attribute.
+ * @param width The width, in pixels, of the plane.
+ * @param height The height, in pixels, of the plane.
+ * @returns The initialized buffer geometry.
+ * @see {@link https://github.com/mrdoob/three.js/blob/master/examples/webgl_geometry_colors.html}
+ */
 function createWaterPlane(width: number, height: number): BufferGeometry {
   // Start with a PlaneGeometry to generate relevant positions/UVs/normals
   // Since the segments act as subdivisions, segment counts need to be 1 less than our goal.
   const baseGeometry = new PlaneGeometry(width, height, NUM_COLUMNS - 1, NUM_ROWS - 1);
 
-  // Set some default positions - everything but the center will be blank
+  // Default everything by the base
   const vertexPositions = baseGeometry.attributes.position;
   const vertexCount = vertexPositions.count;
 
   for(let vertexIdx = 0; vertexIdx < vertexCount; vertexIdx++) {
     vertexPositions.setZ(vertexIdx, BASE_Z_DEPTH);
   }
-
-  // // Set the center to a wave
-  // const centerVertexIdx = Math.floor(vertexCount / 2 + (NUM_COLUMNS / 2))
-  // vertexPositions.setZ(centerVertexIdx, MIN_Z_DEPTH);
-
-  // console.debug(vertexPositions);
 
   // Attach a color attribute and initialize its coloring
   baseGeometry.setAttribute('color', new BufferAttribute(new Float32Array(vertexCount * 3), 3));
@@ -130,24 +125,29 @@ function createWaterPlane(width: number, height: number): BufferGeometry {
 }
 
 function WaterPlane(): JSX.Element {
+  const waterMesh = useRef<Mesh>(null!);
   const waterGeometry = useRef(createWaterPlane(512, 512));
+
+  // Create two different position buffers to swap with each render/wave propagation pass
+  // https://web.archive.org/web/20100224054436/http://www.gamedev.net/reference/programming/features/water/page2.asp
   const sourceBuffer = useRef(waterGeometry.current.attributes.position as BufferAttribute);
   const resultBuffer = useRef(waterGeometry.current.attributes.position.clone());
+
+  // Track when we last updated the buffers
   const lastRenderTime = useRef(0);
-  const waterMesh = useRef<Mesh>(null!);
   const FRAME_SECONDS  = 1/30;
 
   useFrame((state) => {
     if (state.clock.elapsedTime > lastRenderTime.current + FRAME_SECONDS) {
-      // Update the source and result buffer
+      // Update the source and result position buffer
       updateVertexDepth(sourceBuffer.current, resultBuffer.current);
       
-      // Ensure the two buffers get swapped
+      // Ensure the two position buffers get swapped
       const temp = sourceBuffer.current;
       sourceBuffer.current = resultBuffer.current;
       resultBuffer.current = temp;
       
-      // Ensure the geometry gets swapped and made up-to-date
+      // Ensure the geometry uses the new position attribute set and recomputed
       waterGeometry.current.setAttribute("position", resultBuffer.current);
       waterGeometry.current.computeVertexNormals();
       waterGeometry.current.computeBoundingBox();
@@ -202,8 +202,16 @@ function WaterPlane(): JSX.Element {
       position={[0, 0, -256]}
       onPointerDown={onPointerDown}
     >
-      <primitive object={waterGeometry.current} attach="geometry" />
-      <meshPhongMaterial color={0x7777ff} flatShading={true} shininess={1} vertexColors={true} />
+      <primitive
+        object={waterGeometry.current}
+        attach="geometry"
+      />
+      <meshPhongMaterial
+        color={0x7777ff}
+        flatShading={true}
+        shininess={1}
+        vertexColors={true}
+      />
     </mesh>
   );
 }
