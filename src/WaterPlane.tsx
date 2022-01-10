@@ -2,7 +2,9 @@ import { ThreeEvent, useFrame } from "@react-three/fiber";
 import { useRef } from "react";
 import { Mesh, PlaneGeometry, BufferGeometry, BufferAttribute, MathUtils } from "three";
 
-// These two values control the number of vertices that will be in the plane - 256x256 will result in 65,536 vertices
+// These two values control the number of vertices that will be in the plane, e.g.:
+// 256x256 will result in 65,536 vertices
+// 512x512 will result in 262,144 vertices
 const NUM_ROWS = 256;
 const NUM_COLUMNS = 256;
 
@@ -125,8 +127,9 @@ function createWaterPlane(width: number, height: number): BufferGeometry {
 }
 
 function WaterPlane(): JSX.Element {
+  const PLANE_DIMENSIONS = 4096;
   const waterMesh = useRef<Mesh>(null!);
-  const waterGeometry = useRef(createWaterPlane(512, 512));
+  const waterGeometry = useRef(createWaterPlane(PLANE_DIMENSIONS, PLANE_DIMENSIONS));
 
   // Create two different position buffers to swap with each render/wave propagation pass
   // https://web.archive.org/web/20100224054436/http://www.gamedev.net/reference/programming/features/water/page2.asp
@@ -135,35 +138,22 @@ function WaterPlane(): JSX.Element {
 
   // Track when we last updated the buffers
   const lastRenderTime = useRef(0);
-  const FRAME_SECONDS  = 1/30;
+  const FRAME_SECONDS = 1/30;
 
-  useFrame((state) => {
-    if (state.clock.elapsedTime > lastRenderTime.current + FRAME_SECONDS) {
-      // Update the source and result position buffer
-      updateVertexDepth(sourceBuffer.current, resultBuffer.current);
-      
-      // Ensure the two position buffers get swapped
-      const temp = sourceBuffer.current;
-      sourceBuffer.current = resultBuffer.current;
-      resultBuffer.current = temp;
-      
-      // Ensure the geometry uses the new position attribute set and recomputed
-      waterGeometry.current.setAttribute("position", resultBuffer.current);
-      waterGeometry.current.computeVertexNormals();
-      waterGeometry.current.computeBoundingBox();
-      
-      // After the geometry is up to date, apply vertex coloring
-      updateVertexColoring(waterGeometry.current);
+  // Track what's being pointed at
+  const pointerVertexIndex = useRef(-1);
 
-      lastRenderTime.current = state.clock.elapsedTime;
+  const setCurrentPointer = (e: ThreeEvent<PointerEvent>): void => {
+    // If we're only moving, don't bother unless the pointer is down
+    if (e.nativeEvent.type === 'pointermove' && pointerVertexIndex.current === -1) {
+      return;
     }
-  });
 
-  const onPointerDown = (e: ThreeEvent<PointerEvent>): void => {
+    // Now look for intersections
     for(let intersection of e.intersections) {
       // Make sure we're hitting the water mesh
       if (e.object.uuid !== waterMesh.current.uuid) {
-        return;
+        continue;
       }
 
       // Get the intersection point in the object
@@ -189,18 +179,66 @@ function WaterPlane(): JSX.Element {
           }
         });
 
-        // Now update the source buffer at this index to reflect the depth change
-        sourceBuffer.current.setZ(nearestVertexIdx, MIN_Z_DEPTH);
+        // Set the pointer that we're at and exit out
+        pointerVertexIndex.current = nearestVertexIdx;
         e.stopPropagation();
+        return;
       }
     }
   };
+
+  const clearCurrentPointer = (e: ThreeEvent<PointerEvent>): void => {
+    pointerVertexIndex.current = -1;
+  };
+
+  useFrame((state) => {
+    // See if we have pointer data to apply - if so, explicitly set the z-value
+    // FUTURE: Look at debouncing this if necessary
+    if (pointerVertexIndex.current > -1) {
+      sourceBuffer.current.setZ(pointerVertexIndex.current, MIN_Z_DEPTH);
+    }
+
+    // Determine the constraints of the screen and scale to them
+    const screenWidth = window.innerWidth || document.documentElement.clientWidth;
+    const screenHeight = window.innerHeight || document.documentElement.clientHeight;
+    const maxDimension = Math.max(screenWidth, screenHeight);
+    const scaleToMaxDimension = maxDimension / PLANE_DIMENSIONS;
+
+    if (waterMesh.current.scale.x !== scaleToMaxDimension) {
+      console.debug(`scaling ${PLANE_DIMENSIONS}x${PLANE_DIMENSIONS} to ${screenWidth}x${screenHeight} w/ ${scaleToMaxDimension.toFixed(2)}`)
+      waterMesh.current.scale.set(scaleToMaxDimension, scaleToMaxDimension, 1);
+    }
+    
+    // See if it's time to update the buffers
+    if (state.clock.elapsedTime > lastRenderTime.current + FRAME_SECONDS) {
+      // Update the source and result position buffer
+      updateVertexDepth(sourceBuffer.current, resultBuffer.current);
+      
+      // Ensure the two position buffers get swapped
+      const temp = sourceBuffer.current;
+      sourceBuffer.current = resultBuffer.current;
+      resultBuffer.current = temp;
+      
+      // Ensure the geometry uses the new position attribute set and recomputed
+      waterGeometry.current.setAttribute("position", resultBuffer.current);
+      waterGeometry.current.computeVertexNormals();
+      waterGeometry.current.computeBoundingBox();
+      
+      // After the geometry is up to date, apply vertex coloring
+      updateVertexColoring(waterGeometry.current);
+
+      lastRenderTime.current = state.clock.elapsedTime;
+    }
+  });
 
   return (
     <mesh
       ref={waterMesh}
       position={[0, 0, -256]}
-      onPointerDown={onPointerDown}
+      onPointerDown={setCurrentPointer}
+      onPointerMove={setCurrentPointer}
+      onPointerUp={clearCurrentPointer}
+      onPointerLeave={clearCurrentPointer}
     >
       <primitive
         object={waterGeometry.current}
