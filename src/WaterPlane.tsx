@@ -43,8 +43,9 @@ interface WaterPlaneSubdivision {
 }
 
 // These two values control how many subdivisions will be used for the water plane.
-const SUBDIVISION_ROWS = 1;
-const SUBDIVISION_COLUMNS = 1;
+const SUBDIVISION_ROWS = 2;
+const SUBDIVISION_COLUMNS = 2;
+type SubdivisionsByRowCol = WaterPlaneSubdivision[][];
 
 // These two values control the number of vertices that will be in each plane subdivision, e.g.:
 // 256x256 will result in 65,536 vertices
@@ -95,9 +96,10 @@ function updateVertexColoring(geometry: BufferGeometry) {
 /**
  * Updates the z-depth of vertices in the provided subdivision.
  * @param subdivision The subdivision to update.
+ * @param allSubdivisions All subdivisions, arranged by row/column
  * @see {@link https://web.archive.org/web/20100224054436/http://www.gamedev.net/reference/programming/features/water/page2.asp}
  */
-function updateVertexDepth(subdivision: WaterPlaneSubdivision) {
+function updateVertexDepth(subdivision: WaterPlaneSubdivision, allSubdivisions: SubdivisionsByRowCol) {
   const vertexCount = subdivision.sourcePositions.count;
 
   // Vertices are ordered like so:
@@ -106,34 +108,60 @@ function updateVertexDepth(subdivision: WaterPlaneSubdivision) {
   // [6 7 8]
   for (let vertexIdx = 0; vertexIdx < vertexCount; vertexIdx++) {
     // Map this vertex index to the specific row/column index
-    const columnIdx = vertexIdx % NUM_ROWS;
-    const rowIdx = Math.floor(vertexIdx / NUM_COLUMNS);
+    const relativeColumnIdx = vertexIdx % NUM_ROWS;
+    const relativeRowIdx = Math.floor(vertexIdx / NUM_COLUMNS);
 
     // Start averaging z-positions across the other 
     let adjacentTotal = 0.0;
 
     // Pull from the row above if possible
-    if (rowIdx > 0) {
+    if (relativeRowIdx > 0) {     
       const aboveIdx = vertexIdx - NUM_COLUMNS;
-
       adjacentTotal += subdivision.sourcePositions.getZ(aboveIdx);
+    }
+    else if (subdivision.rowIndex > 0) {
+      // Look at the bottom row of the subdivision above
+      const aboveSubdivision = allSubdivisions[subdivision.rowIndex - 1][subdivision.columnIndex];
+      const externalAboveIdx = vertexIdx + (NUM_COLUMNS * (NUM_ROWS - 1));
+
+      adjacentTotal += aboveSubdivision.sourcePositions.getZ(externalAboveIdx);
     }
 
     // Pull from the row below if possible
-    if (rowIdx < NUM_ROWS - 1) {
+    if (relativeRowIdx < NUM_ROWS - 1) {
       const belowIdx = vertexIdx + NUM_COLUMNS;
-
       adjacentTotal += subdivision.sourcePositions.getZ(belowIdx);
+    }
+    else if (subdivision.rowIndex < SUBDIVISION_ROWS - 1) {
+      // Look at the top row of the subdivision below
+      const belowSubdivision = allSubdivisions[subdivision.rowIndex + 1][subdivision.columnIndex];
+      const externalBelowIdx = vertexIdx % NUM_COLUMNS;
+
+      adjacentTotal += belowSubdivision.sourcePositions.getZ(externalBelowIdx);
     }
 
     // Pull from the column on the left if possible
-    if (columnIdx > 0) {
+    if (relativeColumnIdx > 0) {
       adjacentTotal += subdivision.sourcePositions.getZ(vertexIdx - 1);
+    }
+    else if (subdivision.columnIndex > 0) {
+      // Look at the rightmost column of the subdivision to the left
+      const leftSubdivision = allSubdivisions[subdivision.rowIndex][subdivision.columnIndex - 1];
+      const externalLeftIdx = vertexIdx + (NUM_COLUMNS - 1);
+
+      adjacentTotal += leftSubdivision.sourcePositions.getZ(externalLeftIdx);
     }
 
     // Pull from the column on the right if possible
-    if (columnIdx < NUM_COLUMNS - 1) {
+    if (relativeColumnIdx < NUM_COLUMNS - 1) {
       adjacentTotal += subdivision.sourcePositions.getZ(vertexIdx + 1);
+    }
+    else if (subdivision.columnIndex < SUBDIVISION_COLUMNS - 1) {
+      // Look at the leftmost column of the subdivision to the right
+      const rightSubdivision = allSubdivisions[subdivision.rowIndex][subdivision.columnIndex + 1];
+      const externalRightIdx = vertexIdx - (NUM_COLUMNS - 1);
+
+      adjacentTotal += rightSubdivision.sourcePositions.getZ(externalRightIdx);
     }
 
     // Take twice the average of the adjacent points and subtract it from the current position at this index
@@ -189,19 +217,24 @@ function createWaterPlane(width: number, height: number): BufferGeometry {
  * @param totalPlaneDimensions The width and height of the plane as a whole.
  */
 function createSubdivisions(totalPlaneDimensions: number): WaterPlaneSubdivision[] {
-  const INITIAL_OFFSET = -totalPlaneDimensions / 2;
   const PLANE_HEIGHT = totalPlaneDimensions / SUBDIVISION_ROWS;
   const PLANE_WIDTH = totalPlaneDimensions / SUBDIVISION_COLUMNS;
+
+  // For the vertical subdivisions we want to go top-to-bottom, but horizontal we want to go left-to-right
+  const INITIAL_VERT_OFFSET = (totalPlaneDimensions / 2) - (PLANE_HEIGHT / 2);
+  const INITIAL_HORIZ_OFFSET = (-totalPlaneDimensions / 2) + (PLANE_WIDTH / 2);
   const subdivisions: WaterPlaneSubdivision[] = [];
 
   for(let rowIdx = 0; rowIdx < SUBDIVISION_ROWS; rowIdx++) {
-    let rowVertOffset = INITIAL_OFFSET + (0.5 * PLANE_HEIGHT * ((rowIdx + 1) / SUBDIVISION_ROWS));
+    // Subtract plane heights to go top-to-bottom
+    let rowVertOffset = INITIAL_VERT_OFFSET - (PLANE_HEIGHT * rowIdx);
 
     for(let colIdx = 0; colIdx < SUBDIVISION_COLUMNS; colIdx++) {
-      let colHorizOffset = INITIAL_OFFSET + (0.5 * PLANE_WIDTH * ((colIdx + 1) / SUBDIVISION_COLUMNS));
+      // Add plane widths to go left-to-right
+      let colHorizOffset = INITIAL_HORIZ_OFFSET + (PLANE_WIDTH * colIdx);
 
       // Start by creating the plane
-      const waterGeometry = createWaterPlane(PLANE_HEIGHT, PLANE_WIDTH);
+      const waterGeometry = createWaterPlane(PLANE_WIDTH, PLANE_HEIGHT);
 
       // Also attach a mesh and position it
       const waterMesh = new Mesh(waterGeometry, WaterMaterial);
@@ -225,7 +258,7 @@ function createSubdivisions(totalPlaneDimensions: number): WaterPlaneSubdivision
 }
 
 function WaterPlane(): JSX.Element {
-  const PLANE_DIMENSIONS = 4096;
+  const PLANE_DIMENSIONS = 512;
 
   // Track when we last updated the buffers
   const lastRenderTime = useRef(0);
@@ -250,8 +283,8 @@ function WaterPlane(): JSX.Element {
     return uuidMap;
   }, [subdivisions])
 
-  const subdivisionsByRowCol: WaterPlaneSubdivision[][] = useMemo(() => {
-    const rowColArr: WaterPlaneSubdivision[][] = [];
+  const subdivisionsByRowCol: SubdivisionsByRowCol = useMemo(() => {
+    const rowColArr: SubdivisionsByRowCol = [];
 
     subdivisions.current.forEach((sub) => {
       // Make sure we have an array defined for the row
@@ -260,7 +293,9 @@ function WaterPlane(): JSX.Element {
       }
 
       rowColArr[sub.rowIndex][sub.columnIndex] = sub;
-    })
+    });
+
+    console.debug('row/column array', rowColArr);
 
     return rowColArr;
   }, [subdivisions]);
@@ -315,9 +350,20 @@ function WaterPlane(): JSX.Element {
   };
 
   const clearCurrentPointer = (e: ThreeEvent<PointerEvent>): void => {
-    pointerSubdivisionRowIndex.current = -1;
-    pointerSubdivisionColumnIndex.current = -1;
-    pointerVertexIndex.current = -1;
+    // Make sure this applies to one of our subdivisions
+    if (e.object.uuid in subdivisionsByUuid === false) {
+      return;
+    }
+
+    // Get the subdivision
+    const subdivision = subdivisionsByUuid[e.object.uuid];
+
+    // Clear out values if they were previously referencing this object
+    if (pointerSubdivisionRowIndex.current === subdivision.rowIndex && pointerSubdivisionColumnIndex.current === subdivision.columnIndex) {
+      pointerSubdivisionRowIndex.current = -1;
+      pointerSubdivisionColumnIndex.current = -1;
+      pointerVertexIndex.current = -1;
+    }
   };
 
   useFrame((state) => {
@@ -345,7 +391,7 @@ function WaterPlane(): JSX.Element {
       // Update each subdivision
       for (let subdivision of subdivisions.current) {
         // Update the source and render position buffers
-        updateVertexDepth(subdivision);
+        updateVertexDepth(subdivision, subdivisionsByRowCol);
 
         // Ensure the two position buffers get swapped
         const temp = subdivision.sourcePositions;
