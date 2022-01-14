@@ -304,8 +304,8 @@ function WaterPlane(): JSX.Element {
   }, [subdivisions]);
 
   const setCurrentPointer = (e: ThreeEvent<PointerEvent>): void => {
-    // If we're only moving, don't bother unless the pointer is down
-    if (e.nativeEvent.type === 'pointermove' && pointerVertexIndex.current === -1) {
+    // Only bother if the pointer is down
+    if ((e.nativeEvent.buttons & 1) === 0) {
       return;
     }
 
@@ -353,6 +353,14 @@ function WaterPlane(): JSX.Element {
   };
 
   const clearCurrentPointer = (e: ThreeEvent<PointerEvent>): void => {
+    // If there's nothing being pressed, clear out everything and exit
+    if ((e.nativeEvent.buttons & 1) === 0) {
+      pointerSubdivisionRowIndex.current = -1;
+      pointerSubdivisionColumnIndex.current = -1;
+      pointerVertexIndex.current = -1;
+      return;     
+    }
+
     // Make sure this applies to one of our subdivisions
     if (e.object.uuid in subdivisionsByUuid === false) {
       return;
@@ -425,6 +433,7 @@ function WaterPlane(): JSX.Element {
           key={subdivision.key}
           onPointerDown={setCurrentPointer}
           onPointerMove={setCurrentPointer}
+          onPointerEnter={setCurrentPointer}
           onPointerUp={clearCurrentPointer}
           onPointerLeave={clearCurrentPointer}
           />;
