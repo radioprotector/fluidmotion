@@ -1,6 +1,6 @@
 import { ThreeEvent, useFrame } from "@react-three/fiber";
 import { useRef, useMemo } from "react";
-import { Mesh, PlaneGeometry, BufferGeometry, BufferAttribute, MathUtils, MeshPhongMaterial, Color } from "three";
+import { Mesh, PlaneGeometry, BufferGeometry, BufferAttribute, MathUtils, Color, MeshBasicMaterial } from "three";
 
 /**
  * Describes a subdivision of the water plane. Used to help reduce overhead for intersection hit testing.
@@ -50,8 +50,8 @@ type SubdivisionsByRowCol = WaterPlaneSubdivision[][];
 // These two values control the number of vertices that will be in each plane subdivision, e.g.:
 // 256x256 will result in 65,536 vertices per subdivision
 // 512x512 will result in 262,144 vertices per subdivision
-const NUM_ROWS = 128;
-const NUM_COLUMNS = 128;
+const NUM_ROWS = 256;
+const NUM_COLUMNS = 256;
 
 const TOTAL_ROWS = SUBDIVISION_ROWS * NUM_ROWS;
 const WAVE_DAMPING = ((TOTAL_ROWS / 2) - 1)/(TOTAL_ROWS / 2);
@@ -66,8 +66,9 @@ const BASE_COLOR = new Color(BASE_Z_DEPTH_COLOR, BASE_Z_DEPTH_COLOR, 1.0);
 
 /**
  * The material to use for the water.
+ * Use basic material so that we don't need to care about vertex normals.
  */
- const WaterMaterial = new MeshPhongMaterial({color: BASE_COLOR, flatShading: true, shininess: 1.0, vertexColors: true});
+const WaterMaterial = new MeshBasicMaterial({color: BASE_COLOR, vertexColors: true});
 
 /**
  * Calculates a subdivision key for the given row/column index.
@@ -404,9 +405,8 @@ function WaterPlane(): JSX.Element {
         subdivision.sourcePositions = subdivision.resultPositions;
         subdivision.resultPositions = swap;
       
-        // Ensure the geometry uses the new position attribute set and recomputed normals/sphere
+        // Ensure the geometry uses the new position attribute set and recomputed sphere (for hit testing)
         subdivision.geometry.setAttribute("position", subdivision.resultPositions);
-        subdivision.geometry.computeVertexNormals();
         subdivision.geometry.computeBoundingSphere();
         
         // After the geometry is up to date, apply vertex coloring
