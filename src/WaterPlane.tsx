@@ -1,6 +1,6 @@
 import { ThreeEvent, useFrame } from "@react-three/fiber";
 import { useRef, useMemo } from "react";
-import { Mesh, PlaneGeometry, BufferGeometry, BufferAttribute, MathUtils, MeshPhongMaterial } from "three";
+import { Mesh, PlaneGeometry, BufferGeometry, BufferAttribute, MathUtils, MeshPhongMaterial, Color } from "three";
 
 /**
  * Describes a subdivision of the water plane. Used to help reduce overhead for intersection hit testing.
@@ -48,21 +48,26 @@ const SUBDIVISION_COLUMNS = 2;
 type SubdivisionsByRowCol = WaterPlaneSubdivision[][];
 
 // These two values control the number of vertices that will be in each plane subdivision, e.g.:
-// 256x256 will result in 65,536 vertices
-// 512x512 will result in 262,144 vertices
-const NUM_ROWS = 256;
-const NUM_COLUMNS = 256;
+// 256x256 will result in 65,536 vertices per subdivision
+// 512x512 will result in 262,144 vertices per subdivision
+const NUM_ROWS = 128;
+const NUM_COLUMNS = 128;
+
+const TOTAL_ROWS = SUBDIVISION_ROWS * NUM_ROWS;
+const WAVE_DAMPING = ((TOTAL_ROWS / 2) - 1)/(TOTAL_ROWS / 2);
 
 // Track the minimum/maximum Z values for each vertex, and set the starting depth to their average
 const MIN_Z_DEPTH = -1.0;
 const MAX_Z_DEPTH = 1.0;
 const BASE_Z_DEPTH = (MAX_Z_DEPTH + MIN_Z_DEPTH) / 2.0;
-const WAVE_DAMPING = 127/128;
+
+const BASE_Z_DEPTH_COLOR = MathUtils.mapLinear(BASE_Z_DEPTH, MIN_Z_DEPTH, MAX_Z_DEPTH, 0.0, 1.0);
+const BASE_COLOR = new Color(BASE_Z_DEPTH_COLOR, BASE_Z_DEPTH_COLOR, 1.0);
 
 /**
  * The material to use for the water.
  */
- const WaterMaterial = new MeshPhongMaterial({color: 0x7777ff, flatShading: true, shininess: 1.0, vertexColors: true});
+ const WaterMaterial = new MeshPhongMaterial({color: BASE_COLOR, flatShading: true, shininess: 1.0, vertexColors: true});
 
 /**
  * Calculates a subdivision key for the given row/column index.
@@ -173,7 +178,6 @@ function updateVertexDepth(subdivision: WaterPlaneSubdivision, allSubdivisions: 
     // Debug out-of-range values
     if (process.env.NODE_ENV !== 'production') {
       if (Number.isNaN(newZValue)) {
-        //console.debug(`NaN value for ${vertexIdx} at row ${rowIdx} col ${columnIdx}`);
         newZValue = BASE_Z_DEPTH;
       }
     }
@@ -295,8 +299,6 @@ function WaterPlane(): JSX.Element {
       rowColArr[sub.rowIndex][sub.columnIndex] = sub;
     });
 
-    console.debug('row/column array', rowColArr);
-
     return rowColArr;
   }, [subdivisions]);
 
@@ -367,6 +369,8 @@ function WaterPlane(): JSX.Element {
   };
 
   useFrame((state) => {
+    state.scene.background = BASE_COLOR;
+
     // See if we have pointer data to apply - if so, explicitly set the z-value
     // FUTURE: Look at debouncing this if necessary
     if (pointerVertexIndex.current > -1 && pointerSubdivisionRowIndex.current > -1 && pointerSubdivisionColumnIndex.current > -1) {
@@ -388,15 +392,17 @@ function WaterPlane(): JSX.Element {
     // See if it's time to update the buffers
     if (state.clock.elapsedTime > lastRenderTime.current + FRAME_SECONDS) {
 
-      // Update each subdivision
+      // Update the source and render position buffers of each subdivision
       for (let subdivision of subdivisions.current) {
         // Update the source and render position buffers
         updateVertexDepth(subdivision, subdivisionsByRowCol);
+      }
 
-        // Ensure the two position buffers get swapped
-        const temp = subdivision.sourcePositions;
+      // After we've done that and updated each buffer, *NOW* we can swap each subdivision's buffers
+      for (let subdivision of subdivisions.current) {
+        const swap = subdivision.sourcePositions;
         subdivision.sourcePositions = subdivision.resultPositions;
-        subdivision.resultPositions = temp;
+        subdivision.resultPositions = swap;
       
         // Ensure the geometry uses the new position attribute set and recomputed normals/sphere
         subdivision.geometry.setAttribute("position", subdivision.resultPositions);
