@@ -42,26 +42,69 @@ interface WaterPlaneSubdivision {
   resultPositions: BufferAttribute;
 }
 
-// These two values control how many subdivisions will be used for the water plane.
-const SUBDIVISION_ROWS = 2;
-const SUBDIVISION_COLUMNS = 2;
+/**
+ * The total number of rows to use for each subdivision.
+ */
+const SUBDIVISION_ROWS = 3;
+
+/**
+ * The total number of columns in each subdivision row.
+ */
+const SUBDIVISION_COLUMNS = 3;
+
+/**
+ * This controls the overall width of the plane across all subdivisions.
+ */
+const TOTAL_PLANE_WIDTH = 1024;
+
+/**
+ * This controls the overall height of the plane across all subdivisions
+ */
+const TOTAL_PLANE_HEIGHT = 1024;
+
+/**
+ * Describes subdivisions that are indexed first by their row index and then by their column index.
+ */
 type SubdivisionsByRowCol = WaterPlaneSubdivision[][];
 
 // These two values control the number of vertices that will be in each plane subdivision, e.g.:
 // 256x256 will result in 65,536 vertices per subdivision
 // 512x512 will result in 262,144 vertices per subdivision
+
 const NUM_ROWS = 256;
 const NUM_COLUMNS = 256;
 
-const TOTAL_ROWS = SUBDIVISION_ROWS * NUM_ROWS;
-const WAVE_DAMPING = ((TOTAL_ROWS / 2) - 1)/(TOTAL_ROWS / 2);
+/**
+ * The amount to damp the wave each time.
+ * This is calculated by taking half of the total number of rows, and being just a smidge under that in fractional terms.
+ * So if we have a total of 128 rows across all of our subdivisions, we want to use 127/128 as a damping ratio.
+ */
+const WAVE_DAMPING = ((SUBDIVISION_ROWS * NUM_ROWS / 2) - 1)/(SUBDIVISION_ROWS * NUM_ROWS / 2);
 
-// Track the minimum/maximum Z values for each vertex, and set the starting depth to their average
+/**
+ * The minimum Z-depth of each vertex.
+ */
 const MIN_Z_DEPTH = -1.0;
+
+/**
+ * The maximum Z-depth of each vertex.
+ */
 const MAX_Z_DEPTH = 1.0;
+
+/**
+ * The base starting Z-depth to use for each vertex.
+ */
 const BASE_Z_DEPTH = (MAX_Z_DEPTH + MIN_Z_DEPTH) / 2.0;
 
+/**
+ * The color value used for the base starting Z-depth.
+ * Used to fill the background color.
+ */
 const BASE_Z_DEPTH_COLOR = MathUtils.mapLinear(BASE_Z_DEPTH, MIN_Z_DEPTH, MAX_Z_DEPTH, 0.0, 1.0);
+
+/**
+ * The base color to use.
+ */
 const BASE_COLOR = new Color(BASE_Z_DEPTH_COLOR, BASE_Z_DEPTH_COLOR, 1.0);
 
 /**
@@ -219,31 +262,20 @@ function createWaterPlane(width: number, height: number): BufferGeometry {
 
 /**
  * Creates and returns the subdivisions for the plane.
- * @param totalPlaneDimensions The width and height of the plane as a whole.
+ * @param totalWidth The total width of the plane across all subdivisions.
+ * @param totalHeight The total height of the plane across all subdivisions.
  */
-function createSubdivisions(totalPlaneDimensions: number): WaterPlaneSubdivision[] {
-  const PLANE_HEIGHT = totalPlaneDimensions / SUBDIVISION_ROWS;
-  const PLANE_WIDTH = totalPlaneDimensions / SUBDIVISION_COLUMNS;
+function createSubdivisions(totalWidth: number, totalHeight: number): WaterPlaneSubdivision[] {
+  const widthPerPlane = totalWidth / SUBDIVISION_COLUMNS;
+  const heightPerPlane = totalHeight / SUBDIVISION_ROWS;
 
-  // For the vertical subdivisions we want to go top-to-bottom, but horizontal we want to go left-to-right
-  const INITIAL_VERT_OFFSET = (totalPlaneDimensions / 2) - (PLANE_HEIGHT / 2);
-  const INITIAL_HORIZ_OFFSET = (-totalPlaneDimensions / 2) + (PLANE_WIDTH / 2);
   const subdivisions: WaterPlaneSubdivision[] = [];
 
   for(let rowIdx = 0; rowIdx < SUBDIVISION_ROWS; rowIdx++) {
-    // Subtract plane heights to go top-to-bottom
-    let rowVertOffset = INITIAL_VERT_OFFSET - (PLANE_HEIGHT * rowIdx);
-
     for(let colIdx = 0; colIdx < SUBDIVISION_COLUMNS; colIdx++) {
-      // Add plane widths to go left-to-right
-      let colHorizOffset = INITIAL_HORIZ_OFFSET + (PLANE_WIDTH * colIdx);
-
-      // Start by creating the plane
-      const waterGeometry = createWaterPlane(PLANE_WIDTH, PLANE_HEIGHT);
-
-      // Also attach a mesh and position it
+      // Start by creating the plane and then build a mesh to combine it
+      const waterGeometry = createWaterPlane(widthPerPlane, heightPerPlane);
       const waterMesh = new Mesh(waterGeometry, WaterMaterial);
-      waterMesh.position.set(colHorizOffset, rowVertOffset, -256);
 
       const subdivision: WaterPlaneSubdivision = {
         key: getSubdivisionKey(rowIdx, colIdx),
@@ -259,11 +291,47 @@ function createSubdivisions(totalPlaneDimensions: number): WaterPlaneSubdivision
     }
   }
 
+  // Ensure that the subdivisions are arranged/scaled
+  distributeAndScaleSubdivisions(totalWidth, totalHeight, 1, subdivisions);
+
   return subdivisions;
 }
 
+/**
+ * Distributes the subdivisions across the total dimensions of the plane.
+ * @param totalWidth The total width of the plane across all subdivisions.
+ * @param totalHeight The total height of the plane across all subdivisions.
+ * @param scaleToApply The global scale to apply to the total width and height.
+ * @param subdivisions The subdivisions to distribute and scale so that they are arranged evenly across the total plane dimensions.
+ */
+function distributeAndScaleSubdivisions(totalWidth: number, totalHeight: number, scaleToApply: number, subdivisions: WaterPlaneSubdivision[]): void{
+  const scaledTotalWidth = totalWidth * scaleToApply;
+  const scaledTotalHeight = totalHeight * scaleToApply;
+  const widthPerPlane = scaledTotalWidth / SUBDIVISION_COLUMNS;
+  const heightPerPlane = scaledTotalHeight / SUBDIVISION_ROWS;
+
+  // For the vertical subdivisions we want to go top-to-bottom, but horizontal we want to go left-to-right
+  const initialVertOffset = (scaledTotalHeight / 2) - (heightPerPlane / 2);
+  const initialHorizOffset = (-scaledTotalWidth / 2) + (widthPerPlane / 2);
+
+  for(let subdivision of subdivisions)
+  {
+    // Subtract plane heights to go top-to-bottom
+    let rowVertOffset = initialVertOffset - (heightPerPlane * subdivision.rowIndex);
+    // Add plane widths to go left-to-right
+    let colHorizOffset = initialHorizOffset + (widthPerPlane * subdivision.columnIndex);
+
+    // Translate the mesh by the appropriate offset
+    subdivision.mesh.position.set(colHorizOffset, rowVertOffset, -256);
+
+    // Apply the scale
+    subdivision.mesh.scale.set(scaleToApply, scaleToApply, 1);
+  }
+}
+
 function WaterPlane(): JSX.Element {
-  const PLANE_DIMENSIONS = 512;
+  // Track the last scale that was used
+  const lastPlaneScale = useRef(1);
 
   // Track when we last updated the buffers
   const lastRenderTime = useRef(0);
@@ -274,8 +342,8 @@ function WaterPlane(): JSX.Element {
   const pointerSubdivisionColumnIndex = useRef(-1);
   const pointerVertexIndex = useRef(-1);
 
-  // Build subdivisions, using a ref to maintain between refreshes
-  const subdivisions = useRef(createSubdivisions(PLANE_DIMENSIONS));
+  // Build subdivisions, using a ref to maintain the geometry between refreshes
+  const subdivisions = useRef(createSubdivisions(TOTAL_PLANE_WIDTH, TOTAL_PLANE_HEIGHT));
 
   // Build other versions of this using a memoized format
   const subdivisionsByUuid: Record<string, WaterPlaneSubdivision> = useMemo(() => {
@@ -303,6 +371,7 @@ function WaterPlane(): JSX.Element {
     return rowColArr;
   }, [subdivisions]);
 
+  // Add handling for the pointer to update the currently-affected item
   const setCurrentPointer = (e: ThreeEvent<PointerEvent>): void => {
     // Only bother if the pointer is down
     if ((e.nativeEvent.buttons & 1) === 0) {
@@ -387,16 +456,19 @@ function WaterPlane(): JSX.Element {
       subdivision.sourcePositions.setZ(pointerVertexIndex.current, MIN_Z_DEPTH);
     }
 
-    // // Determine the constraints of the screen and scale to them
-    // const screenWidth = window.innerWidth || document.documentElement.clientWidth;
-    // const screenHeight = window.innerHeight || document.documentElement.clientHeight;
-    // const maxDimension = Math.max(screenWidth, screenHeight);
-    // const scaleToMaxDimension = maxDimension / PLANE_DIMENSIONS;
+    // Determine the constraints of the screen and scale to them
+    const screenWidth = state.size.width;
+    const screenHeight = state.size.height;
+    const widthScale = screenWidth / TOTAL_PLANE_WIDTH;
+    const heightScale = screenHeight / TOTAL_PLANE_HEIGHT;
+    const scaleToMaxDimension = Math.max(widthScale, heightScale);
 
-    // if (waterMesh.current.scale.x !== scaleToMaxDimension) {
-    //   console.debug(`scaling ${PLANE_DIMENSIONS}x${PLANE_DIMENSIONS} to ${screenWidth}x${screenHeight} w/ ${scaleToMaxDimension.toFixed(2)}`)
-    //   waterMesh.current.scale.set(scaleToMaxDimension, scaleToMaxDimension, 1);
-    // }
+    // See if this is different from what we had last time
+    if (lastPlaneScale.current !== scaleToMaxDimension) {
+      console.debug(`scaling ${TOTAL_PLANE_WIDTH}x${TOTAL_PLANE_HEIGHT} to ${screenWidth}x${screenHeight} w/ ${scaleToMaxDimension.toFixed(2)}`);
+      distributeAndScaleSubdivisions(TOTAL_PLANE_WIDTH, TOTAL_PLANE_HEIGHT, scaleToMaxDimension, subdivisions.current);
+      lastPlaneScale.current = scaleToMaxDimension;
+    }
     
     // See if it's time to update the buffers
     if (state.clock.elapsedTime > lastRenderTime.current + FRAME_SECONDS) {
