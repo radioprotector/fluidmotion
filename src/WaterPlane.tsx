@@ -114,7 +114,7 @@ const BASE_COLOR = new Color(BASE_Z_DEPTH_COLOR, BASE_Z_DEPTH_COLOR, 1.0);
  * The material to use for the water.
  * Use basic material so that we don't need to care about vertex normals.
  */
-const WaterMaterial = new MeshBasicMaterial({color: BASE_COLOR, vertexColors: true});
+const WaterMaterial = new MeshBasicMaterial({color: BASE_COLOR, vertexColors: true, fog: false, depthWrite: false});
 
 /**
  * Calculates a subdivision key for the given row/column index.
