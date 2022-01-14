@@ -285,6 +285,9 @@ function createSubdivisions(totalWidth: number, totalHeight: number): WaterPlane
       const waterGeometry = createWaterPlane(widthPerPlane, heightPerPlane);
       const waterMesh = new Mesh(waterGeometry, WaterMaterial);
 
+      // Compute the bounding sphere so we can use this for hit testing later on
+      waterGeometry.computeBoundingSphere();
+
       const subdivision: WaterPlaneSubdivision = {
         key: getSubdivisionKey(rowIdx, colIdx),
         rowIndex: rowIdx,
@@ -493,9 +496,8 @@ function WaterPlane(): JSX.Element {
         subdivision.sourcePositions = subdivision.resultPositions;
         subdivision.resultPositions = swap;
       
-        // Ensure the geometry uses the new position attribute set and recomputed sphere (for hit testing)
+        // Ensure the geometry uses the new position attribute set
         subdivision.geometry.setAttribute("position", subdivision.resultPositions);
-        subdivision.geometry.computeBoundingSphere();
         
         // After the geometry is up to date, apply vertex coloring
         updateVertexColoring(subdivision.geometry);
