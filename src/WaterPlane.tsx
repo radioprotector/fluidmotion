@@ -43,6 +43,11 @@ interface WaterPlaneSubdivision {
 }
 
 /**
+ * Describes subdivisions that are indexed first by their row index and then by their column index.
+ */
+ type SubdivisionsByRowCol = WaterPlaneSubdivision[][];
+
+/**
  * The total number of rows to use for each subdivision.
  */
 const SUBDIVISION_ROWS = 3;
@@ -58,28 +63,26 @@ const SUBDIVISION_COLUMNS = 3;
 const TOTAL_PLANE_WIDTH = 1024;
 
 /**
- * This controls the overall height of the plane across all subdivisions
+ * This controls the overall height of the plane across all subdivisions.
  */
 const TOTAL_PLANE_HEIGHT = 1024;
 
 /**
- * Describes subdivisions that are indexed first by their row index and then by their column index.
+ * The number of vertex rows in each plane subdivision.
  */
-type SubdivisionsByRowCol = WaterPlaneSubdivision[][];
+const VERTEX_ROWS = 256;
 
-// These two values control the number of vertices that will be in each plane subdivision, e.g.:
-// 256x256 will result in 65,536 vertices per subdivision
-// 512x512 will result in 262,144 vertices per subdivision
-
-const NUM_ROWS = 256;
-const NUM_COLUMNS = 256;
+/**
+ * The number of vertex columns in each plane subdivision.
+ */
+const VERTEX_COLUMNS = 256;
 
 /**
  * The amount to damp the wave each time.
  * This is calculated by taking half of the total number of rows, and being just a smidge under that in fractional terms.
  * So if we have a total of 128 rows across all of our subdivisions, we want to use 127/128 as a damping ratio.
  */
-const WAVE_DAMPING = ((SUBDIVISION_ROWS * NUM_ROWS / 2) - 1)/(SUBDIVISION_ROWS * NUM_ROWS / 2);
+const WAVE_DAMPING = ((SUBDIVISION_ROWS * VERTEX_ROWS / 2) - 1)/(SUBDIVISION_ROWS * VERTEX_ROWS / 2);
 
 /**
  * The minimum Z-depth of each vertex.
@@ -127,7 +130,7 @@ function getSubdivisionKey(rowIndex: number, columnIndex: number): string {
  * Applies coloring to each vertex in the geometry based on its z-depth.
  * @param geometry The buffer geometry that contains position and color data.
  */
-function updateVertexColoring(geometry: BufferGeometry) {
+function updateVertexColoring(geometry: BufferGeometry): void {
   const vertexPositions = geometry.attributes.position;
   const vertexColors = geometry.attributes.color;
   const vertexCount = vertexPositions.count;
@@ -148,7 +151,7 @@ function updateVertexColoring(geometry: BufferGeometry) {
  * @param allSubdivisions All subdivisions, arranged by row/column
  * @see {@link https://web.archive.org/web/20100224054436/http://www.gamedev.net/reference/programming/features/water/page2.asp}
  */
-function updateVertexDepth(subdivision: WaterPlaneSubdivision, allSubdivisions: SubdivisionsByRowCol) {
+function updateVertexDepth(subdivision: WaterPlaneSubdivision, allSubdivisions: SubdivisionsByRowCol): void {
   const vertexCount = subdivision.sourcePositions.count;
 
   // Vertices are ordered like so:
@@ -157,34 +160,34 @@ function updateVertexDepth(subdivision: WaterPlaneSubdivision, allSubdivisions: 
   // [6 7 8]
   for (let vertexIdx = 0; vertexIdx < vertexCount; vertexIdx++) {
     // Map this vertex index to the specific row/column index
-    const relativeColumnIdx = vertexIdx % NUM_ROWS;
-    const relativeRowIdx = Math.floor(vertexIdx / NUM_COLUMNS);
+    const relativeColumnIdx = vertexIdx % VERTEX_ROWS;
+    const relativeRowIdx = Math.floor(vertexIdx / VERTEX_COLUMNS);
 
     // Start averaging z-positions across the other 
     let adjacentTotal = 0.0;
 
     // Pull from the row above if possible
     if (relativeRowIdx > 0) {     
-      const aboveIdx = vertexIdx - NUM_COLUMNS;
+      const aboveIdx = vertexIdx - VERTEX_COLUMNS;
       adjacentTotal += subdivision.sourcePositions.getZ(aboveIdx);
     }
     else if (subdivision.rowIndex > 0) {
       // Look at the bottom row of the subdivision above
       const aboveSubdivision = allSubdivisions[subdivision.rowIndex - 1][subdivision.columnIndex];
-      const externalAboveIdx = vertexIdx + (NUM_COLUMNS * (NUM_ROWS - 1));
+      const externalAboveIdx = vertexIdx + (VERTEX_COLUMNS * (VERTEX_ROWS - 1));
 
       adjacentTotal += aboveSubdivision.sourcePositions.getZ(externalAboveIdx);
     }
 
     // Pull from the row below if possible
-    if (relativeRowIdx < NUM_ROWS - 1) {
-      const belowIdx = vertexIdx + NUM_COLUMNS;
+    if (relativeRowIdx < VERTEX_ROWS - 1) {
+      const belowIdx = vertexIdx + VERTEX_COLUMNS;
       adjacentTotal += subdivision.sourcePositions.getZ(belowIdx);
     }
     else if (subdivision.rowIndex < SUBDIVISION_ROWS - 1) {
       // Look at the top row of the subdivision below
       const belowSubdivision = allSubdivisions[subdivision.rowIndex + 1][subdivision.columnIndex];
-      const externalBelowIdx = vertexIdx % NUM_COLUMNS;
+      const externalBelowIdx = vertexIdx % VERTEX_COLUMNS;
 
       adjacentTotal += belowSubdivision.sourcePositions.getZ(externalBelowIdx);
     }
@@ -196,19 +199,19 @@ function updateVertexDepth(subdivision: WaterPlaneSubdivision, allSubdivisions: 
     else if (subdivision.columnIndex > 0) {
       // Look at the rightmost column of the subdivision to the left
       const leftSubdivision = allSubdivisions[subdivision.rowIndex][subdivision.columnIndex - 1];
-      const externalLeftIdx = vertexIdx + (NUM_COLUMNS - 1);
+      const externalLeftIdx = vertexIdx + (VERTEX_COLUMNS - 1);
 
       adjacentTotal += leftSubdivision.sourcePositions.getZ(externalLeftIdx);
     }
 
     // Pull from the column on the right if possible
-    if (relativeColumnIdx < NUM_COLUMNS - 1) {
+    if (relativeColumnIdx < VERTEX_COLUMNS - 1) {
       adjacentTotal += subdivision.sourcePositions.getZ(vertexIdx + 1);
     }
     else if (subdivision.columnIndex < SUBDIVISION_COLUMNS - 1) {
       // Look at the leftmost column of the subdivision to the right
       const rightSubdivision = allSubdivisions[subdivision.rowIndex][subdivision.columnIndex + 1];
-      const externalRightIdx = vertexIdx - (NUM_COLUMNS - 1);
+      const externalRightIdx = vertexIdx - (VERTEX_COLUMNS - 1);
 
       adjacentTotal += rightSubdivision.sourcePositions.getZ(externalRightIdx);
     }
@@ -243,7 +246,7 @@ function updateVertexDepth(subdivision: WaterPlaneSubdivision, allSubdivisions: 
 function createWaterPlane(width: number, height: number): BufferGeometry {
   // Start with a PlaneGeometry to generate relevant positions/UVs/normals
   // Since the segments act as subdivisions, segment counts need to be 1 less than our goal.
-  const baseGeometry = new PlaneGeometry(width, height, NUM_COLUMNS - 1, NUM_ROWS - 1);
+  const baseGeometry = new PlaneGeometry(width, height, VERTEX_COLUMNS - 1, VERTEX_ROWS - 1);
 
   // Default everything by the base
   const vertexPositions = baseGeometry.attributes.position;
@@ -270,6 +273,11 @@ function createSubdivisions(totalWidth: number, totalHeight: number): WaterPlane
   const heightPerPlane = totalHeight / SUBDIVISION_ROWS;
 
   const subdivisions: WaterPlaneSubdivision[] = [];
+
+  if (process.env.NODE_ENV !== 'production') {
+    const totalVertexCount = SUBDIVISION_COLUMNS * SUBDIVISION_ROWS * VERTEX_COLUMNS * VERTEX_ROWS;
+    console.debug(`creating ${SUBDIVISION_COLUMNS}x${SUBDIVISION_ROWS} matrix of ${VERTEX_COLUMNS}x${VERTEX_ROWS} vertices each, total ${totalVertexCount} vertices`);
+  }
 
   for(let rowIdx = 0; rowIdx < SUBDIVISION_ROWS; rowIdx++) {
     for(let colIdx = 0; colIdx < SUBDIVISION_COLUMNS; colIdx++) {
@@ -304,7 +312,7 @@ function createSubdivisions(totalWidth: number, totalHeight: number): WaterPlane
  * @param scaleToApply The global scale to apply to the total width and height.
  * @param subdivisions The subdivisions to distribute and scale so that they are arranged evenly across the total plane dimensions.
  */
-function distributeAndScaleSubdivisions(totalWidth: number, totalHeight: number, scaleToApply: number, subdivisions: WaterPlaneSubdivision[]): void{
+function distributeAndScaleSubdivisions(totalWidth: number, totalHeight: number, scaleToApply: number, subdivisions: WaterPlaneSubdivision[]): void {
   const scaledTotalWidth = totalWidth * scaleToApply;
   const scaledTotalHeight = totalHeight * scaleToApply;
   const widthPerPlane = scaledTotalWidth / SUBDIVISION_COLUMNS;
