@@ -404,6 +404,8 @@ function WaterPlane(): JSX.Element {
 
   // Manually handle our own touch handling, since this is otherwise a huge drag on performance
   const camera = useThree((state) => state.camera);
+  const cameraAspect = useThree((state) => (state.camera as PerspectiveCamera).aspect);
+  const cameraFov = useThree((state) => (state.camera as PerspectiveCamera).fov);
 
   useEffect(() => {
     const raycaster = new Raycaster();
@@ -473,12 +475,12 @@ function WaterPlane(): JSX.Element {
 
   // Store frustrum height at the plane's depth
   const frustrumHeightAtPlane = useMemo(() => {
-    return 2.0 * (camera.position.z - PLANE_DEPTH) * Math.tan((camera as PerspectiveCamera).fov * 0.5 * MathUtils.DEG2RAD);
-  }, [camera]);
+    return 2.0 * (camera.position.z - PLANE_DEPTH) * Math.tan(cameraFov * 0.5 * MathUtils.DEG2RAD);
+  }, [camera, cameraFov]);
 
   const frustrumWidthAtPlane = useMemo(() => {
-    return frustrumHeightAtPlane * (camera as PerspectiveCamera).aspect;
-  }, [camera, frustrumHeightAtPlane]);
+    return frustrumHeightAtPlane * cameraAspect;
+  }, [cameraAspect, frustrumHeightAtPlane]);
 
   useFrame((state) => {
     state.scene.background = BASE_COLOR;
