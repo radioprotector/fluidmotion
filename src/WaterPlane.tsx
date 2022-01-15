@@ -465,16 +465,16 @@ function WaterPlane(): JSX.Element {
           }
         }
 
-      // Clear the last worker result
-      lastWorkerResult.current = null;
+        // Clear the last worker result
+        lastWorkerResult.current = null;
 
         // Signal that we're ready for another result to process
-      const readyMessage: readyMessageToWorker = { type: 'ready' };
-      worker.current.postMessage(readyMessage);
-      }
+        const readyMessage: readyMessageToWorker = { type: 'ready' };
+        worker.current.postMessage(readyMessage);
 
-      // Indicate when we last rendered
-      lastRenderTime.current = state.clock.elapsedTime;
+        // Indicate when we last rendered
+        lastRenderTime.current = state.clock.elapsedTime;
+      }
     }
   });
 
