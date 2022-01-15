@@ -19,7 +19,7 @@ const state = {
 
   resultPositions: [],
 
-  pendingPointerEvents: []
+  pendingPointerEvents: new Map()
 };
 
 const fns = {};
@@ -60,19 +60,23 @@ fns.handleInit = function(data) {
     }
   }
 
-  // Reset the array of pending pointer events.
-  state.pendingPointerEvents = [];
+  // Reset the collection of pending pointer events.
+  state.pendingPointerEvents.clear();
 };
 
 /**
  * Handles when the a pointer event has been logged.
  */
 fns.handlePointer = function(data) {
-  state.pendingPointerEvents.push({
-    rowIndex: data.rowIndex,
-    columnIndex: data.columnIndex,
-    vertexIndex: data.vertexIndex
-  });
+  const key = `${data.rowIndex}_${data.columnIndex}_${data.vertexIndex}`;
+
+  state.pendingPointerEvents.set(
+    key,
+    {
+      rowIndex: data.rowIndex,
+      columnIndex: data.columnIndex,
+      vertexIndex: data.vertexIndex
+    });
 };
 
 /**
@@ -85,13 +89,13 @@ fns.handleReady = function() {
   const getZ = fns.getZ;
 
   // First process all pointer events
-  for (let pointerEvent of state.pendingPointerEvents) {
+  for (let [_, pointerEvent] of state.pendingPointerEvents) {
     const vertexPositions = state.sourcePositions[pointerEvent.rowIndex][pointerEvent.columnIndex];
 
     // Map the vertex index * 3 (for x/y/z) and then add 2 more to set the z position
     vertexPositions[(pointerEvent.vertexIndex * 3) + 2] = state.minVertexDepth;
   }
-  state.pendingPointerEvents = [];
+  state.pendingPointerEvents.clear();
 
   // Then perform propagation
   for(let subRowIdx = 0; subRowIdx < state.subdivisionRows; subRowIdx++) {
