@@ -247,7 +247,7 @@ function WaterPlane(): JSX.Element {
   const pointerSubdivisionColumnIndex = useRef(-1);
   const pointerVertexIndex = useRef(-1);
   const pointerLastFiredTime = useRef(0);
-  const POINTER_DEBOUNCE_SECONDS = 1/15;
+  const POINTER_DEBOUNCE_SECONDS = 1/30;
 
   // Build subdivisions, using a ref to maintain the geometry between refreshes
   const subdivisions = useRef(createSubdivisions(TOTAL_PLANE_WIDTH, TOTAL_PLANE_HEIGHT));
