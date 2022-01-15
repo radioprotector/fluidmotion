@@ -246,6 +246,8 @@ function WaterPlane(): JSX.Element {
   const pointerSubdivisionRowIndex = useRef(-1);
   const pointerSubdivisionColumnIndex = useRef(-1);
   const pointerVertexIndex = useRef(-1);
+  const pointerLastFiredTime = useRef(0);
+  const POINTER_DEBOUNCE_SECONDS = 1/15;
 
   // Build subdivisions, using a ref to maintain the geometry between refreshes
   const subdivisions = useRef(createSubdivisions(TOTAL_PLANE_WIDTH, TOTAL_PLANE_HEIGHT));
@@ -410,18 +412,20 @@ function WaterPlane(): JSX.Element {
   useFrame((state) => {
     state.scene.background = BASE_COLOR;
 
-    // See if we have pointer data to apply - if so, send a message
-    if (pointerVertexIndex.current > -1 && pointerSubdivisionRowIndex.current > -1 && pointerSubdivisionColumnIndex.current > -1) {
+    // See if we have pointer data to apply and need to debounce - if so, send a message
+    if (state.clock.elapsedTime > pointerLastFiredTime.current + POINTER_DEBOUNCE_SECONDS) {
+      if (pointerVertexIndex.current > -1 && pointerSubdivisionRowIndex.current > -1 && pointerSubdivisionColumnIndex.current > -1) {
+        // Create a message to send to the web worker
+        const message: pointerMessageToWorker = {
+          type: 'pointer',
+          rowIndex: pointerSubdivisionRowIndex.current,
+          columnIndex: pointerSubdivisionColumnIndex.current,
+          vertexIndex: pointerVertexIndex.current
+        }
 
-      // Create a message to send to the web worker
-      const message: pointerMessageToWorker = {
-        type: 'pointer',
-        rowIndex: pointerSubdivisionRowIndex.current,
-        columnIndex: pointerSubdivisionColumnIndex.current,
-        vertexIndex: pointerVertexIndex.current
+        worker.current.postMessage(message);
+        pointerLastFiredTime.current = state.clock.elapsedTime;
       }
-
-      worker.current.postMessage(message);
     }
 
     // Determine the constraints of the screen and scale to them
