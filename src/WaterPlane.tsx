@@ -1,6 +1,6 @@
 import { useRef, useMemo, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { Mesh, PlaneGeometry, BufferGeometry, BufferAttribute, MathUtils, Color, MeshBasicMaterial, Vector2, Raycaster, Intersection } from "three";
+import { Mesh, PlaneGeometry, BufferGeometry, BufferAttribute, MathUtils, Color, MeshBasicMaterial, Vector2, Raycaster, Intersection, PerspectiveCamera } from "three";
 
 import { ScalingMode, useStore } from './motionState';
 
@@ -67,6 +67,11 @@ const TOTAL_PLANE_WIDTH = 1024;
 const TOTAL_PLANE_HEIGHT = 1024;
 
 /**
+ * The depth of the plane in world coordinates.
+ */
+const PLANE_DEPTH = -256;
+
+/**
  * The number of vertex rows in each plane subdivision.
  */
 const VERTEX_ROWS = 128;
@@ -89,12 +94,12 @@ const VERTEX_COUNT = VERTEX_ROWS * VERTEX_COLUMNS;
 const WAVE_DAMPING = ((SUBDIVISION_ROWS * VERTEX_ROWS / 2) - 1)/(SUBDIVISION_ROWS * VERTEX_ROWS / 2);
 
 /**
- * The minimum Z-depth of each vertex.
+ * The minimum Z-depth of each vertex in local coordinates.
  */
 const MIN_Z_DEPTH = -1.0;
 
 /**
- * The maximum Z-depth of each vertex.
+ * The maximum Z-depth of each vertex in local coordinates.
  */
 const MAX_Z_DEPTH = 1.0;
 
@@ -232,7 +237,7 @@ function distributeAndScaleSubdivisions(totalWidth: number, totalHeight: number,
     let colHorizOffset = initialHorizOffset + (widthPerPlane * subdivision.columnIndex);
 
     // Translate the mesh by the appropriate offset
-    subdivision.mesh.position.set(colHorizOffset, rowVertOffset, -256);
+    subdivision.mesh.position.set(colHorizOffset, rowVertOffset, PLANE_DEPTH);
 
     // Apply the scale
     subdivision.mesh.scale.set(scaleToApply, scaleToApply, 1);
@@ -341,7 +346,7 @@ function WaterPlane(): JSX.Element {
     return rowColArr;
   }, [subdivisions]);
 
-  // Create a web worker to handle the 
+  // Create a web worker to handle the wave processing
   const lastWorkerResult = useRef<resultMessageFromWorker | null>(null);
   const worker = useRef<Worker>(null!);
 
@@ -464,7 +469,16 @@ function WaterPlane(): JSX.Element {
       window.removeEventListener('pointermove', pointerMoved);
       window.removeEventListener('pointerup', pointerMoved);
     }
-  }, [camera, subdivisionsByUuid, subdivisionsByRowCol, subdivisionMeshes])
+  }, [camera, subdivisionsByUuid, subdivisionsByRowCol, subdivisionMeshes]);
+
+  // Store frustrum height at the plane's depth
+  const frustrumHeightAtPlane = useMemo(() => {
+    return 2.0 * (camera.position.z - PLANE_DEPTH) * Math.tan((camera as PerspectiveCamera).fov * 0.5 * MathUtils.DEG2RAD);
+  }, [camera]);
+
+  const frustrumWidthAtPlane = useMemo(() => {
+    return frustrumHeightAtPlane * (camera as PerspectiveCamera).aspect;
+  }, [camera, frustrumHeightAtPlane]);
 
   useFrame((state) => {
     state.scene.background = BASE_COLOR;
@@ -504,20 +518,29 @@ function WaterPlane(): JSX.Element {
     }
 
     // Determine the constraints of the screen and scale to them
-    const UNITS_TO_PIXELS_FUDGE = 2.45;
     const screenWidth = state.size.width;
     const screenHeight = state.size.height;
-    const widthScale = screenWidth / (TOTAL_PLANE_WIDTH * UNITS_TO_PIXELS_FUDGE);
-    const heightScale = screenHeight / (TOTAL_PLANE_HEIGHT * UNITS_TO_PIXELS_FUDGE);
+    const widthScale = frustrumWidthAtPlane / TOTAL_PLANE_WIDTH;
+    const heightScale = frustrumHeightAtPlane / TOTAL_PLANE_HEIGHT;
     let scaleFactor = 1;
 
     if (scalingMode.current === ScalingMode.ScaleToFitSmaller) {
-
-
-      scaleFactor = Math.min(widthScale, heightScale);
+      // If the ratio of the overall screen width to the frustrum width is smaller, scale using the width.
+      if (screenWidth / frustrumWidthAtPlane < screenHeight / frustrumHeightAtPlane) {
+        scaleFactor = widthScale;
+      }
+      else {
+        scaleFactor = heightScale;
+      }
     }
     else if (scalingMode.current === ScalingMode.ScaleToFitLarger) {
-      scaleFactor = Math.max(widthScale, heightScale);
+      // If the ratio of the overall screen width to the frustrum width is larger, scale using the height.
+      if (screenWidth / frustrumWidthAtPlane < screenHeight / frustrumHeightAtPlane) {
+        scaleFactor = heightScale;
+      }
+      else {
+        scaleFactor = widthScale;
+      }
     }
 
     // See if this is different from what we had last time
