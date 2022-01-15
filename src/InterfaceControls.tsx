@@ -6,6 +6,7 @@ import { useStore, ScalingMode } from './motionState';
 import './InterfaceControls.css';
 
 function InterfaceControls(): JSX.Element {
+  const initiateReset = useStore((state) => state.initiateReset);
   const cycleRain = useStore((state) => state.cycleRainStage);
   const cycleScale = useStore((state) => state.cycleScaling);
   const scaleMode: ScalingMode = useStore((state) => state.scaling);
@@ -21,12 +22,19 @@ function InterfaceControls(): JSX.Element {
         return 'The view is scaled so that the smaller dimension is aligned with the screen edges.';
 
       default:
-        return 'The view is centered but kept at actual scale.';
+        return 'The view is centered at original scale.';
     }
   }, [scaleMode])
 
   return (
     <div id="control-items">
+      <button
+        type="button"
+        title="Reset"
+        onClick={(e) => { initiateReset(); e.stopPropagation(); return false; }}
+      >
+        <FontAwesomeIcon fixedWidth={true} icon="eraser" />
+      </button>
       <button
         type="button"
         title="Toggle rain"

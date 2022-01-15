@@ -41,6 +41,11 @@ interface MotionState {
 
   rainFrequencyStageIndex: number;
 
+  /**
+   * The last time a reset was triggered.
+   */
+  lastResetTime: number;
+
   setScaling: (newScaling: ScalingMode) => void;
 
   cycleScaling: () => void;
@@ -48,6 +53,8 @@ interface MotionState {
   setRainStage: (newStageIndex: number) => void;
 
   cycleRainStage: () => void;
+
+  initiateReset: () => void;
 }
 
 export const useStore = create<
@@ -59,6 +66,7 @@ export const useStore = create<
   scaling: ScalingMode.ScaleToFitLarger as ScalingMode,
   rainFrequencySeconds: 0,
   rainFrequencyStageIndex: 0,
+  lastResetTime: 0,
 
   setScaling: (newScaling) => set(state => { 
     state.scaling = newScaling;
@@ -95,5 +103,9 @@ export const useStore = create<
 
     // Cascade to the frequency in seconds
     state.rainFrequencySeconds = rainFrequencyStages[state.rainFrequencyStageIndex];
+  }),
+
+  initiateReset: () => set(state => {
+    state.lastResetTime = Date.now();
   })
 })));

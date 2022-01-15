@@ -53,6 +53,13 @@ export interface readyMessageToWorker {
 }
 
 /**
+ * Describes the message that is sent to tell the worker to reset its contents to the base state.
+ */
+export interface resetMessageToWorker {
+  type: 'reset';
+}
+
+/**
  * Describes the message that is sent to tell the worker that a pointer touch event has occurred.
  */
 export interface pointerMessageToWorker {

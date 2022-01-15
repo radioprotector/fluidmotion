@@ -11,6 +11,8 @@ const state = {
 
   maxVertexDepth: 0,
 
+  baseVertexDepth: 0,
+
   vertexDepthRange: 0,
 
   waveDampingFactor: 0.99,
@@ -18,6 +20,8 @@ const state = {
   sourcePositions: [],
 
   resultPositions: [],
+
+  resetRequested: false,
 
   pendingPointerEvents: new Map()
 };
@@ -43,8 +47,10 @@ fns.handleInit = function(data) {
   state.rowsPerSubdivision = data.rowsPerSubdivision;
   state.minVertexDepth = data.minVertexDepth;
   state.maxVertexDepth = data.maxVertexDepth;
+  state.baseVertexDepth = data.minVertexDepth + ((data.maxVertexDepth - data.minVertexDepth) / 2);
   state.vertexDepthRange = data.maxVertexDepth - data.minVertexDepth;
   state.waveDampingFactor = data.waveDampingFactor;
+  state.resetRequested = false;
 
   // Now create source, result positions, and vertex positions for each subdivision
   for (let subRowIdx = 0; subRowIdx < state.subdivisionRows; subRowIdx++) {
@@ -65,9 +71,22 @@ fns.handleInit = function(data) {
 };
 
 /**
+ * Handles when a reset has been requested.
+ */
+fns.handleReset = function() {
+  state.resetRequested = true;
+  state.pendingPointerEvents.clear();
+};
+
+/**
  * Handles when the a pointer event has been logged.
  */
 fns.handlePointer = function(data) {
+  // Discard when we're resetting
+  if (state.resetRequested) {
+    return;
+  }
+
   const key = `${data.rowIndex}_${data.columnIndex}_${data.vertexIndex}`;
 
   state.pendingPointerEvents.set(
@@ -89,15 +108,17 @@ fns.handleReady = function() {
   const getZ = fns.getZ;
 
   // First process all pointer events
-  for (let [/* key */, pointerEvent] of state.pendingPointerEvents) {
-    const sourcePositions = state.sourcePositions[pointerEvent.rowIndex][pointerEvent.columnIndex];
-    const resultPositions = state.resultPositions[pointerEvent.rowIndex][pointerEvent.columnIndex];
+  if (state.resetRequested === false) {
+    for (let [/* key */, pointerEvent] of state.pendingPointerEvents) {
+      const sourcePositions = state.sourcePositions[pointerEvent.rowIndex][pointerEvent.columnIndex];
+      const resultPositions = state.resultPositions[pointerEvent.rowIndex][pointerEvent.columnIndex];
 
-    // Set the z-position to the minimum depth at this point
-    fns.setZ(sourcePositions, pointerEvent.vertexIndex, state.minVertexDepth);
+      // Set the z-position to the minimum depth at this point
+      fns.setZ(sourcePositions, pointerEvent.vertexIndex, state.minVertexDepth);
 
-    // Maximize the result buffer at this point as well to maximize the amount of "snap"
-    fns.setZ(resultPositions, pointerEvent.vertexIndex, state.maxVertexDepth);
+      // Maximize the result buffer at this point as well to maximize the amount of "snap"
+      fns.setZ(resultPositions, pointerEvent.vertexIndex, state.maxVertexDepth);
+    }
   }
   state.pendingPointerEvents.clear();
 
@@ -110,6 +131,13 @@ fns.handleReady = function() {
       const resultPositions = state.resultPositions[subRowIdx][subColIdx];
 
       for (let vertexIdx = 0; vertexIdx < vertexCount; vertexIdx++) {
+        // First handle if a reset has been requested - if that's the case, just zero out both the source and result and continue
+        if (state.resetRequested) {
+          fns.setZ(sourcePositions, vertexIdx, state.baseVertexDepth);
+          fns.setZ(resultPositions, vertexIdx, state.baseVertexDepth);
+          continue;
+        }
+
         // Map this vertex index to the specific row/column index in the subdivision
         const relativeColumnIdx = vertexIdx % state.rowsPerSubdivision;
         const relativeRowIdx = Math.floor(vertexIdx / state.columnsPerSubdivision);
@@ -221,6 +249,9 @@ fns.handleReady = function() {
     }
   }
 
+  // We've processed any requested reset by now
+  state.resetRequested = false;
+
   // Post the message
   postMessage(message, transferObjects);
 };
@@ -229,6 +260,10 @@ onmessage = function(e) {
   switch(e.data.type) {
     case 'init':
       fns.handleInit(e.data);
+      break;
+
+    case 'reset':
+      fns.handleReset();
       break;
 
     case 'pointer':

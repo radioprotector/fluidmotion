@@ -4,7 +4,7 @@ import { Mesh, PlaneGeometry, BufferGeometry, BufferAttribute, MathUtils, Color,
 
 import { ScalingMode, useStore } from './motionState';
 
-import { initMessageToWorker, pointerMessageToWorker, readyMessageToWorker, resultMessageFromWorker } from "./workerInterface";
+import { initMessageToWorker, pointerMessageToWorker, readyMessageToWorker, resetMessageToWorker, resultMessageFromWorker } from "./workerInterface";
 
 /**
  * Describes a subdivision of the water plane. Used to help reduce overhead for intersection hit testing.
@@ -400,6 +400,21 @@ function WaterPlane(): JSX.Element {
       worker.current.terminate();
       lastWorkerResult.current = null;
     }
+  }, []);
+
+  // When a reset event has been initiated in state, we want to notify the worker
+  useEffect(() => {
+    const notifyWorker = (): void => {
+      if (worker.current !== null) {
+        const resetMessage: resetMessageToWorker = {
+          type: 'reset'
+        };
+
+        worker.current.postMessage(resetMessage);
+      }
+    };
+
+    return useStore.subscribe((state) => state.lastResetTime, notifyWorker);
   }, []);
 
   // Manually handle our own touch handling, since this is otherwise a huge drag on performance
