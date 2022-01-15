@@ -1,6 +1,7 @@
 import { ThreeEvent, useFrame } from "@react-three/fiber";
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useEffect } from "react";
 import { Mesh, PlaneGeometry, BufferGeometry, BufferAttribute, MathUtils, Color, MeshBasicMaterial } from "three";
+import { initMessageToWorker, pointerMessageToWorker, readyMessageToWorker, resultMessageFromWorker } from "./workerInterface";
 
 /**
  * Describes a subdivision of the water plane. Used to help reduce overhead for intersection hit testing.
@@ -127,116 +128,6 @@ function getSubdivisionKey(rowIndex: number, columnIndex: number): string {
 }
 
 /**
- * Applies coloring to each vertex in the geometry based on its z-depth.
- * @param geometry The buffer geometry that contains position and color data.
- */
-function updateVertexColoring(geometry: BufferGeometry): void {
-  const vertexPositions = geometry.attributes.position;
-  const vertexColors = geometry.attributes.color;
-  const vertexCount = vertexPositions.count;
-
-  for (let vertexIdx = 0; vertexIdx < vertexCount; vertexIdx++) {
-    const vertexZ = vertexPositions.getZ(vertexIdx);
-    const colorScale = MathUtils.mapLinear(vertexZ, MIN_Z_DEPTH, MAX_Z_DEPTH, 0.0, 1.0);
-
-    vertexColors.setXYZ(vertexIdx, colorScale, colorScale, 1.0);
-  }
-
-  vertexColors.needsUpdate = true;
-}
-
-/**
- * Updates the z-depth of vertices in the provided subdivision.
- * @param subdivision The subdivision to update.
- * @param allSubdivisions All subdivisions, arranged by row/column
- * @see {@link https://web.archive.org/web/20100224054436/http://www.gamedev.net/reference/programming/features/water/page2.asp}
- */
-function updateVertexDepth(subdivision: WaterPlaneSubdivision, allSubdivisions: SubdivisionsByRowCol): void {
-  const vertexCount = subdivision.sourcePositions.count;
-
-  // Vertices are ordered like so:
-  // [0 1 2]
-  // [3 4 5]
-  // [6 7 8]
-  for (let vertexIdx = 0; vertexIdx < vertexCount; vertexIdx++) {
-    // Map this vertex index to the specific row/column index
-    const relativeColumnIdx = vertexIdx % VERTEX_ROWS;
-    const relativeRowIdx = Math.floor(vertexIdx / VERTEX_COLUMNS);
-
-    // Start averaging z-positions across the other 
-    let adjacentTotal = 0.0;
-
-    // Pull from the row above if possible
-    if (relativeRowIdx > 0) {     
-      const aboveIdx = vertexIdx - VERTEX_COLUMNS;
-      adjacentTotal += subdivision.sourcePositions.getZ(aboveIdx);
-    }
-    else if (subdivision.rowIndex > 0) {
-      // Look at the bottom row of the subdivision above
-      const aboveSubdivision = allSubdivisions[subdivision.rowIndex - 1][subdivision.columnIndex];
-      const externalAboveIdx = vertexIdx + (VERTEX_COLUMNS * (VERTEX_ROWS - 1));
-
-      adjacentTotal += aboveSubdivision.sourcePositions.getZ(externalAboveIdx);
-    }
-
-    // Pull from the row below if possible
-    if (relativeRowIdx < VERTEX_ROWS - 1) {
-      const belowIdx = vertexIdx + VERTEX_COLUMNS;
-      adjacentTotal += subdivision.sourcePositions.getZ(belowIdx);
-    }
-    else if (subdivision.rowIndex < SUBDIVISION_ROWS - 1) {
-      // Look at the top row of the subdivision below
-      const belowSubdivision = allSubdivisions[subdivision.rowIndex + 1][subdivision.columnIndex];
-      const externalBelowIdx = vertexIdx % VERTEX_COLUMNS;
-
-      adjacentTotal += belowSubdivision.sourcePositions.getZ(externalBelowIdx);
-    }
-
-    // Pull from the column on the left if possible
-    if (relativeColumnIdx > 0) {
-      adjacentTotal += subdivision.sourcePositions.getZ(vertexIdx - 1);
-    }
-    else if (subdivision.columnIndex > 0) {
-      // Look at the rightmost column of the subdivision to the left
-      const leftSubdivision = allSubdivisions[subdivision.rowIndex][subdivision.columnIndex - 1];
-      const externalLeftIdx = vertexIdx + (VERTEX_COLUMNS - 1);
-
-      adjacentTotal += leftSubdivision.sourcePositions.getZ(externalLeftIdx);
-    }
-
-    // Pull from the column on the right if possible
-    if (relativeColumnIdx < VERTEX_COLUMNS - 1) {
-      adjacentTotal += subdivision.sourcePositions.getZ(vertexIdx + 1);
-    }
-    else if (subdivision.columnIndex < SUBDIVISION_COLUMNS - 1) {
-      // Look at the leftmost column of the subdivision to the right
-      const rightSubdivision = allSubdivisions[subdivision.rowIndex][subdivision.columnIndex + 1];
-      const externalRightIdx = vertexIdx - (VERTEX_COLUMNS - 1);
-
-      adjacentTotal += rightSubdivision.sourcePositions.getZ(externalRightIdx);
-    }
-
-    // Take twice the average of the adjacent points and subtract it from the current position at this index
-    let newZValue = MathUtils.clamp((adjacentTotal / 2.0) - subdivision.resultPositions.getZ(vertexIdx), MIN_Z_DEPTH, MAX_Z_DEPTH);
-
-    // Apply damping
-    newZValue *= WAVE_DAMPING;
-
-    // Debug out-of-range values
-    if (process.env.NODE_ENV !== 'production') {
-      if (Number.isNaN(newZValue)) {
-        newZValue = BASE_Z_DEPTH;
-      }
-    }
-
-    subdivision.resultPositions.setZ(vertexIdx, newZValue);
-  }
-  
-  // Ensure this is updated
-  subdivision.resultPositions.needsUpdate = true;
-}
-
-/**
  * Creates a buffer geometry to represent the water plane, with an additional vertex-specific color buffer attribute.
  * @param width The width, in pixels, of the plane.
  * @param height The height, in pixels, of the plane.
@@ -248,17 +139,20 @@ function createWaterPlane(width: number, height: number): BufferGeometry {
   // Since the segments act as subdivisions, segment counts need to be 1 less than our goal.
   const baseGeometry = new PlaneGeometry(width, height, VERTEX_COLUMNS - 1, VERTEX_ROWS - 1);
 
-  // Default everything by the base
+  // Default everything by the base as well as the color
   const vertexPositions = baseGeometry.attributes.position;
   const vertexCount = vertexPositions.count;
+  const vertexColors = new Float32Array(vertexCount * 3);
 
   for(let vertexIdx = 0; vertexIdx < vertexCount; vertexIdx++) {
     vertexPositions.setZ(vertexIdx, BASE_Z_DEPTH);
+    vertexColors[(vertexIdx * 3)] = 0.5;
+    vertexColors[(vertexIdx * 3) + 1] = 0.5;
+    vertexColors[(vertexIdx * 3) + 2] = 1;
   }
 
-  // Attach a color attribute and initialize its coloring
-  baseGeometry.setAttribute('color', new BufferAttribute(new Float32Array(vertexCount * 3), 3));
-  updateVertexColoring(baseGeometry);
+  // Attach the color array as an attribute
+  baseGeometry.setAttribute('color', new BufferAttribute(vertexColors, 3));
 
   return baseGeometry;
 }
@@ -356,7 +250,7 @@ function WaterPlane(): JSX.Element {
   // Build subdivisions, using a ref to maintain the geometry between refreshes
   const subdivisions = useRef(createSubdivisions(TOTAL_PLANE_WIDTH, TOTAL_PLANE_HEIGHT));
 
-  // Build other versions of this using a memoized format
+  // Build other versions of the subdivisions using a memoized format
   const subdivisionsByUuid: Record<string, WaterPlaneSubdivision> = useMemo(() => {
     const uuidMap: Record<string, WaterPlaneSubdivision> = {};
 
@@ -365,7 +259,7 @@ function WaterPlane(): JSX.Element {
     });
 
     return uuidMap;
-  }, [subdivisions])
+  }, [subdivisions]);
 
   const subdivisionsByRowCol: SubdivisionsByRowCol = useMemo(() => {
     const rowColArr: SubdivisionsByRowCol = [];
@@ -381,6 +275,54 @@ function WaterPlane(): JSX.Element {
 
     return rowColArr;
   }, [subdivisions]);
+
+  // Create a web worker to handle the 
+  const lastWorkerResult = useRef<resultMessageFromWorker | null>(null);
+  const worker = useRef<Worker>(null!);
+
+  useEffect(() => {
+    // Create a handler
+    const messageHandler = (e: MessageEvent) => {
+      if (e.data && e.data.type === 'result') {
+        lastWorkerResult.current = e.data;
+      }
+    };
+
+    const errorHandler = (e: ErrorEvent) => {
+      console.error('web worker error', errorHandler);
+    }
+
+    // Create the web worker and handlers
+    worker.current = new Worker(new URL('./waveWorker.js', import.meta.url));
+    worker.current.onmessage = messageHandler;
+    worker.current.onerror = errorHandler;
+
+    // Initialize the worker state
+    const positionTemplate = new Float32Array(subdivisions.current[0].geometry.getAttribute('position').array);
+    const message: initMessageToWorker = {
+      type: 'init',
+      subdivisionRows: SUBDIVISION_ROWS,
+      subdivisionColumns: SUBDIVISION_COLUMNS,
+      rowsPerSubdivision: VERTEX_ROWS,
+      columnsPerSubdivision: VERTEX_COLUMNS,
+      minVertexDepth: MIN_Z_DEPTH,
+      maxVertexDepth: MAX_Z_DEPTH,
+      waveDampingFactor: WAVE_DAMPING,
+      vertexPositionTemplate: positionTemplate
+    };
+
+    worker.current.postMessage(message, [positionTemplate.buffer]);
+
+    // Reset the last result
+    lastWorkerResult.current = null;
+
+    // Clean up events and terminate the worker
+    return () => {
+      worker.current.removeEventListener('message', messageHandler);
+      worker.current.removeEventListener('error', errorHandler);
+      worker.current.terminate();
+    }
+  }, []);
 
   // Add handling for the pointer to update the currently-affected item
   const setCurrentPointer = (e: ThreeEvent<PointerEvent>): void => {
@@ -460,11 +402,18 @@ function WaterPlane(): JSX.Element {
   useFrame((state) => {
     state.scene.background = BASE_COLOR;
 
-    // See if we have pointer data to apply - if so, explicitly set the z-value
-    // FUTURE: Look at debouncing this if necessary
+    // See if we have pointer data to apply - if so, send a message
     if (pointerVertexIndex.current > -1 && pointerSubdivisionRowIndex.current > -1 && pointerSubdivisionColumnIndex.current > -1) {
-      const subdivision = subdivisionsByRowCol[pointerSubdivisionRowIndex.current][pointerSubdivisionColumnIndex.current];
-      subdivision.sourcePositions.setZ(pointerVertexIndex.current, MIN_Z_DEPTH);
+
+      // Create a message to send to the web worker
+      const message: pointerMessageToWorker = {
+        type: 'pointer',
+        rowIndex: pointerSubdivisionRowIndex.current,
+        columnIndex: pointerSubdivisionColumnIndex.current,
+        vertexIndex: pointerVertexIndex.current
+      }
+
+      worker.current.postMessage(message);
     }
 
     // Determine the constraints of the screen and scale to them
@@ -484,25 +433,35 @@ function WaterPlane(): JSX.Element {
     // See if it's time to update the buffers
     if (state.clock.elapsedTime > lastRenderTime.current + FRAME_SECONDS) {
 
-      // Update the source and render position buffers of each subdivision
-      for (let subdivision of subdivisions.current) {
-        // Update the source and render position buffers
-        updateVertexDepth(subdivision, subdivisionsByRowCol);
+      // Make sure we have a result
+      if (lastWorkerResult.current !== null) {
+        for(let subRowIdx = 0; subRowIdx < SUBDIVISION_ROWS; subRowIdx++) {
+          for(let subColIdx = 0; subColIdx < SUBDIVISION_COLUMNS; subColIdx++) {
+            
+            const subdivision = subdivisionsByRowCol[subRowIdx][subColIdx];
+            const subdivisionPositions = subdivision.mesh.geometry.getAttribute('position') as BufferAttribute;
+            const subdivisionColors = subdivision.mesh.geometry.getAttribute('color') as BufferAttribute;
+     
+            // const newPositionArray = new Float32Array(lastWorkerResult.current.vertexPositions[subRowIdx][subColIdx], 0, subdivisionPositions.array.length);
+            // const newColorArray = new Float32Array(lastWorkerResult.current.vertexColors[subRowIdx][subColIdx], 0, subdivisionColors.array.length);
+            const newPositionArray = lastWorkerResult.current.vertexPositions[subRowIdx][subColIdx];
+            const newColorArray = lastWorkerResult.current.vertexColors[subRowIdx][subColIdx];
+            
+            // Copy the positions/colors into the corresponding BufferAttributes
+            subdivisionPositions.copyArray(newPositionArray).needsUpdate = true;
+            subdivisionColors.copyArray(newColorArray).needsUpdate = true;
+          }
+        }
       }
 
-      // After we've done that and updated each buffer, *NOW* we can swap each subdivision's buffers
-      for (let subdivision of subdivisions.current) {
-        const swap = subdivision.sourcePositions;
-        subdivision.sourcePositions = subdivision.resultPositions;
-        subdivision.resultPositions = swap;
-      
-        // Ensure the geometry uses the new position attribute set
-        subdivision.geometry.setAttribute("position", subdivision.resultPositions);
-        
-        // After the geometry is up to date, apply vertex coloring
-        updateVertexColoring(subdivision.geometry);
-      }
+      // Clear the last worker result
+      lastWorkerResult.current = null;
 
+      // Signal that we're ready
+      const readyMessage: readyMessageToWorker = { type: 'ready' };
+      worker.current.postMessage(readyMessage);
+
+      // Indicate when we last rendered
       lastRenderTime.current = state.clock.elapsedTime;
     }
   });
