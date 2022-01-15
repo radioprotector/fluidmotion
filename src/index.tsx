@@ -4,6 +4,11 @@ import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 
+import { library } from '@fortawesome/fontawesome-svg-core';
+import { faSun, faCloudSun, faCloudSunRain, faCloudRain, faCloudShowersHeavy, faCompressAlt, faExpandAlt, faExpand } from '@fortawesome/free-solid-svg-icons';
+
+library.add(faSun, faCloudSun, faCloudSunRain, faCloudRain, faCloudShowersHeavy, faCompressAlt, faExpandAlt, faExpand);
+
 ReactDOM.render(
   <React.StrictMode>
     <App />

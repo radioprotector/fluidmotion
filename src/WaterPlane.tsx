@@ -413,9 +413,13 @@ function WaterPlane(): JSX.Element {
         return;
       }
   
-      // Don't do anything if this is intended to interact with a button
-      if (e.target !== null && (e.target as Element).nodeName === 'BUTTON') {
+      // Don't do anything if this is intended to interact with a button (or an icon within it)
+      if (e.target !== null) {
+        const targetElem = e.target as Element;
+
+        if (targetElem.nodeName === 'BUTTON' || targetElem.nodeName === 'svg' || targetElem.nodeName === 'path') {
         return;
+      }
       }
 
       // Normalize pointer coordinates to be in the [-1, 1] range expected by the raycaster.
@@ -500,17 +504,20 @@ function WaterPlane(): JSX.Element {
     }
 
     // Determine the constraints of the screen and scale to them
+    const UNITS_TO_PIXELS_FUDGE = 2.45;
     const screenWidth = state.size.width;
     const screenHeight = state.size.height;
-    const widthScale = screenWidth / TOTAL_PLANE_WIDTH;
-    const heightScale = screenHeight / TOTAL_PLANE_HEIGHT;
+    const widthScale = screenWidth / (TOTAL_PLANE_WIDTH * UNITS_TO_PIXELS_FUDGE);
+    const heightScale = screenHeight / (TOTAL_PLANE_HEIGHT * UNITS_TO_PIXELS_FUDGE);
     let scaleFactor = 1;
 
-    if (scalingMode.current === ScalingMode.ToSmallest) {
-      scaleFactor = Math.max(widthScale, heightScale);
-    }
-    else if (scalingMode.current === ScalingMode.ToLargest) {
+    if (scalingMode.current === ScalingMode.ScaleToFitSmaller) {
+
+
       scaleFactor = Math.min(widthScale, heightScale);
+    }
+    else if (scalingMode.current === ScalingMode.ScaleToFitLarger) {
+      scaleFactor = Math.max(widthScale, heightScale);
     }
 
     // See if this is different from what we had last time
