@@ -2,6 +2,8 @@ import { useRef, useMemo, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Mesh, PlaneGeometry, BufferGeometry, BufferAttribute, MathUtils, Color, MeshBasicMaterial, Vector2, Raycaster, Intersection } from "three";
 
+import { ScalingMode, useStore } from './motionState';
+
 import { initMessageToWorker, pointerMessageToWorker, readyMessageToWorker, resultMessageFromWorker } from "./workerInterface";
 
 /**
@@ -73,6 +75,11 @@ const VERTEX_ROWS = 128;
  * The number of vertex columns in each plane subdivision.
  */
 const VERTEX_COLUMNS = 128;
+
+/**
+ * The total number of vertices in each plane subdivision.
+ */
+const VERTEX_COUNT = VERTEX_ROWS * VERTEX_COLUMNS;
 
 /**
  * The amount to damp the wave each time.
@@ -165,7 +172,7 @@ function createSubdivisions(totalWidth: number, totalHeight: number): WaterPlane
   const subdivisions: WaterPlaneSubdivision[] = [];
 
   if (process.env.NODE_ENV !== 'production') {
-    const totalVertexCount = SUBDIVISION_COLUMNS * SUBDIVISION_ROWS * VERTEX_COLUMNS * VERTEX_ROWS;
+    const totalVertexCount = SUBDIVISION_COLUMNS * SUBDIVISION_ROWS * VERTEX_COUNT;
     console.debug(`creating ${SUBDIVISION_COLUMNS}x${SUBDIVISION_ROWS} matrix of ${VERTEX_COLUMNS}x${VERTEX_ROWS} vertices each, total ${totalVertexCount} vertices`);
   }
 
@@ -281,6 +288,19 @@ function WaterPlane(): JSX.Element {
   const lastRenderTime = useRef(0);
   const FRAME_SECONDS = 1/30;
 
+  // Track store-related concerns
+  const lastRainTime = useRef(0);
+  const rainFrequencySeconds = useRef(useStore.getState().rainFrequencySeconds);
+  const scalingMode = useRef(useStore.getState().scaling as ScalingMode);
+
+  useEffect(() => useStore.subscribe(
+    state => (rainFrequencySeconds.current = state.rainFrequencySeconds)
+  ), []);
+
+  useEffect(() => useStore.subscribe(
+    state => (scalingMode.current = state.scaling)
+  ), []);
+
   // Track what's being pointed at
   const pointerSubdivisionRowIndex = useRef(-1);
   const pointerSubdivisionColumnIndex = useRef(-1);
@@ -393,6 +413,11 @@ function WaterPlane(): JSX.Element {
         return;
       }
   
+      // Don't do anything if this is intended to interact with a button
+      if (e.target !== null && (e.target as Element).nodeName === 'BUTTON') {
+        return;
+      }
+
       // Normalize pointer coordinates to be in the [-1, 1] range expected by the raycaster.
       // The Y dimension gets flipped to account for HTML's different coordinate system.
       raycasterPointer.x = (e.clientX / window.innerWidth) * 2 - 1;
@@ -456,18 +481,43 @@ function WaterPlane(): JSX.Element {
       }
     }
 
+    // See if we're due to add rain
+    if (rainFrequencySeconds.current > 0 && state.clock.elapsedTime > lastRainTime.current + rainFrequencySeconds.current) {
+      const randomRowIndex = Math.floor(Math.random() * SUBDIVISION_ROWS);
+      const randomColumnIndex = Math.floor(Math.random() * SUBDIVISION_COLUMNS);
+      const randomVertexIndex = Math.floor(Math.random() * VERTEX_COUNT);
+
+      // Treat this like a regular pointer effect
+      const message: pointerMessageToWorker = {
+        type: 'pointer',
+        rowIndex: randomRowIndex,
+        columnIndex: randomColumnIndex,
+        vertexIndex: randomVertexIndex
+      }
+
+      worker.current.postMessage(message);
+      lastRainTime.current = state.clock.elapsedTime;
+    }
+
     // Determine the constraints of the screen and scale to them
     const screenWidth = state.size.width;
     const screenHeight = state.size.height;
     const widthScale = screenWidth / TOTAL_PLANE_WIDTH;
     const heightScale = screenHeight / TOTAL_PLANE_HEIGHT;
-    const scaleToMaxDimension = Math.max(widthScale, heightScale);
+    let scaleFactor = 1;
+
+    if (scalingMode.current === ScalingMode.ToSmallest) {
+      scaleFactor = Math.max(widthScale, heightScale);
+    }
+    else if (scalingMode.current === ScalingMode.ToLargest) {
+      scaleFactor = Math.min(widthScale, heightScale);
+    }
 
     // See if this is different from what we had last time
-    if (lastPlaneScale.current !== scaleToMaxDimension) {
-      console.debug(`scaling ${TOTAL_PLANE_WIDTH}x${TOTAL_PLANE_HEIGHT} to ${screenWidth}x${screenHeight} w/ ${scaleToMaxDimension.toFixed(2)}`);
-      distributeAndScaleSubdivisions(TOTAL_PLANE_WIDTH, TOTAL_PLANE_HEIGHT, scaleToMaxDimension, subdivisions.current);
-      lastPlaneScale.current = scaleToMaxDimension;
+    if (lastPlaneScale.current !== scaleFactor) {
+      console.debug(`scaling ${TOTAL_PLANE_WIDTH}x${TOTAL_PLANE_HEIGHT} to ${screenWidth}x${screenHeight} w/ ${scaleFactor.toFixed(2)}`);
+      distributeAndScaleSubdivisions(TOTAL_PLANE_WIDTH, TOTAL_PLANE_HEIGHT, scaleFactor, subdivisions.current);
+      lastPlaneScale.current = scaleFactor;
     }
     
     // See if it's time to update the buffers
