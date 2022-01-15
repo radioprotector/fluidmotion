@@ -8,7 +8,7 @@ import WaterPlane from './WaterPlane';
 function App(): JSX.Element {
   return (
     <div id="canvas-container">
-      <Canvas>
+      <Canvas gl={{alpha: false, antialias: false}}>
         <WaterPlane />
       </Canvas>
       {/* Only include stats and theme reviewer in development */}
