@@ -1,6 +1,7 @@
-import { ThreeEvent, useFrame } from "@react-three/fiber";
 import { useRef, useMemo, useEffect } from "react";
-import { Mesh, PlaneGeometry, BufferGeometry, BufferAttribute, MathUtils, Color, MeshBasicMaterial } from "three";
+import { useFrame, useThree } from "@react-three/fiber";
+import { Mesh, PlaneGeometry, BufferGeometry, BufferAttribute, MathUtils, Color, MeshBasicMaterial, Vector2, Raycaster, Intersection } from "three";
+
 import { initMessageToWorker, pointerMessageToWorker, readyMessageToWorker, resultMessageFromWorker } from "./workerInterface";
 
 /**
@@ -241,6 +242,43 @@ function distributeAndScaleSubdivisions(totalWidth: number, totalHeight: number,
   }
 }
 
+/**
+ * Finds the vertex in the subdivision that is closest to the provided intersection.
+ * @param subdivision The subdivision.
+ * @param intersection The intersection data. This must have a face defined.
+ * @returns The index of the vertex in the subdivision's mesh that is closest to the intersection.
+ */
+function findNearestVertex(subdivision: WaterPlaneSubdivision, intersection: Intersection): number {
+  // If we don't have a face, then exit out
+  if (!intersection.face) {
+    return 0;
+  }
+
+  // Get the intersection point in the object's coordinates
+  const intersectionPointWorld = intersection.point;
+  const intersectionPointObject = intersection.object.worldToLocal(intersectionPointWorld);
+
+  // Determine, out of all of the three vertices on the face, which is closest to the intersection point
+  let nearestVertexIdx = -1;
+  let nearestVertexDistance = Number.MAX_SAFE_INTEGER;
+
+  [intersection.face.a, intersection.face.b, intersection.face.c].forEach((vertexIdx) => {
+    // Get the X/Y coordinates of this vertex
+    const vertexPositionX = subdivision.sourcePositions.getX(vertexIdx);
+    const vertexPositionY = subdivision.sourcePositions.getY(vertexIdx);
+
+    // Get the distance to the click X/Y coordinates in object space
+    let distanceFromIntersection = Math.sqrt(Math.pow(vertexPositionX - intersectionPointObject.x, 2) + Math.pow(vertexPositionY - intersectionPointObject.y, 2));
+    
+    if (distanceFromIntersection < nearestVertexDistance) {
+      nearestVertexIdx = vertexIdx;
+      nearestVertexDistance = distanceFromIntersection;
+    }
+  });
+
+  return nearestVertexIdx;
+}
+
 function WaterPlane(): JSX.Element {
   // Track the last scale that was used
   const lastPlaneScale = useRef(1);
@@ -260,6 +298,10 @@ function WaterPlane(): JSX.Element {
   const subdivisions = useRef(createSubdivisions(TOTAL_PLANE_WIDTH, TOTAL_PLANE_HEIGHT));
 
   // Build other versions of the subdivisions using a memoized format
+  const subdivisionMeshes = useMemo(() => {
+    return subdivisions.current.map((sub) => sub.mesh);
+  }, [subdivisions]);
+
   const subdivisionsByUuid: Record<string, WaterPlaneSubdivision> = useMemo(() => {
     const uuidMap: Record<string, WaterPlaneSubdivision> = {};
 
@@ -341,80 +383,65 @@ function WaterPlane(): JSX.Element {
     }
   }, []);
 
-  // Add handling for the pointer to update the currently-affected item
-  const setCurrentPointer = (e: ThreeEvent<PointerEvent>): void => {
-    // Only bother if the pointer is down
-    if ((e.nativeEvent.buttons & 1) === 0) {
-      return;
-    }
+  // Manually handle our own touch handling, since this is otherwise a huge drag on performance
+  const camera = useThree((state) => state.camera);
 
-    // Now look for intersections
-    for(let intersection of e.intersections) {
-      // Make sure we're hitting a subdivision
-      if (e.object.uuid in subdivisionsByUuid === false) {
-        continue;
-      }
+  useEffect(() => {
+    const raycaster = new Raycaster();
+    const raycasterPointer = new Vector2();
 
-      // Get the subdivision
-      const subdivision = subdivisionsByUuid[e.object.uuid];
-
-      // Get the intersection point in the object
-      const intersectionPointWorld = intersection.point;
-      const intersectionPointObject = intersection.object.worldToLocal(intersectionPointWorld);
-
-      // If we have a face, use that to easily find which of its vertices is closest to the click
-      if (intersection.face) {
-        let nearestVertexIdx = -1;
-        let nearestVertexDistance = Number.MAX_SAFE_INTEGER;
-
-        [intersection.face.a, intersection.face.b, intersection.face.c].forEach((vertexIdx) => {
-          // Get the X/Y coordinates of this vertex
-          const vertexPositionX = subdivision.sourcePositions.getX(vertexIdx);
-          const vertexPositionY = subdivision.sourcePositions.getY(vertexIdx);
-
-          // Get the distance to the click X/Y coordinates in object space
-          let distanceFromIntersection = Math.sqrt(Math.pow(vertexPositionX - intersectionPointObject.x, 2) + Math.pow(vertexPositionY - intersectionPointObject.y, 2));
-          
-          if (distanceFromIntersection < nearestVertexDistance) {
-            nearestVertexIdx = vertexIdx;
-            nearestVertexDistance = distanceFromIntersection;
-          }
-        });
-
-        // Set the pointer that we're at and exit out
-        pointerVertexIndex.current = nearestVertexIdx;
-        pointerSubdivisionRowIndex.current = subdivision.rowIndex;
-        pointerSubdivisionColumnIndex.current = subdivision.columnIndex;
-        e.stopPropagation();
+    const pointerMoved = (e: PointerEvent): void => {
+      // If there's nothing being pressed, clear out everything and exit
+      if ((e.buttons & 1) === 0) {
+        pointerSubdivisionRowIndex.current = -1;
+        pointerSubdivisionColumnIndex.current = -1;
+        pointerVertexIndex.current = -1;
         return;
       }
+  
+      // Normalize pointer coordinates to be in the [-1, 1] range expected by the raycaster.
+      // The Y dimension gets flipped to account for HTML's different coordinate system.
+      raycasterPointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+      raycasterPointer.y = - (e.clientY / window.innerHeight) * 2 + 1
+      raycaster.setFromCamera(raycasterPointer, camera);
+  
+      // See if we were intersecting something beforehand - if so, hit-test that first
+      if (pointerVertexIndex.current !== -1) {
+        // Look for an intersection with our last subdivision mesh
+        const lastSubdivision = subdivisionsByRowCol[pointerSubdivisionRowIndex.current][pointerSubdivisionColumnIndex.current];
+        const lastMeshIntersect = raycaster.intersectObject(lastSubdivision.mesh);
+  
+        if (lastMeshIntersect.length > 0 && lastMeshIntersect[0].face) {
+          // Update just the vertex and exit out
+          pointerVertexIndex.current = findNearestVertex(lastSubdivision, lastMeshIntersect[0]);
+          return;
+        }
+      }
+  
+      // Do this the hard way and try to intersect with each mesh
+      const intersects = raycaster.intersectObjects(subdivisionMeshes);
+  
+      for(let intersection of intersects) {
+        if (intersection.face) {
+          const subdivision = subdivisionsByUuid[intersection.object.uuid];
+          pointerVertexIndex.current = findNearestVertex(subdivision, intersection);
+          pointerSubdivisionRowIndex.current = subdivision.rowIndex;
+          pointerSubdivisionColumnIndex.current = subdivision.columnIndex;
+          return;
+        }
+      }
     }
-  };
 
-  const clearCurrentPointer = (e: ThreeEvent<PointerEvent>): void => {
-    // If there's nothing being pressed, clear out everything and exit
-    if ((e.nativeEvent.buttons & 1) === 0) {
-      pointerSubdivisionRowIndex.current = -1;
-      pointerSubdivisionColumnIndex.current = -1;
-      pointerVertexIndex.current = -1;
-      return;     
+    window.addEventListener('pointerdown', pointerMoved);
+    window.addEventListener('pointermove', pointerMoved);
+    window.addEventListener('pointerup', pointerMoved);
+
+    return () => {
+      window.removeEventListener('pointerdown', pointerMoved);
+      window.removeEventListener('pointermove', pointerMoved);
+      window.removeEventListener('pointerup', pointerMoved);
     }
-
-    // Make sure this applies to one of our subdivisions
-    if (e.object.uuid in subdivisionsByUuid === false) {
-      return;
-    }
-
-    // Get the subdivision
-    const subdivision = subdivisionsByUuid[e.object.uuid];
-
-    // Clear out values if they were previously referencing this object
-    if (pointerSubdivisionRowIndex.current === subdivision.rowIndex && pointerSubdivisionColumnIndex.current === subdivision.columnIndex) {
-      pointerSubdivisionRowIndex.current = -1;
-      pointerSubdivisionColumnIndex.current = -1;
-      pointerVertexIndex.current = -1;
-    }
-  };
+  }, [camera, subdivisionsByUuid, subdivisionsByRowCol, subdivisionMeshes])
 
   useFrame((state) => {
     state.scene.background = BASE_COLOR;
@@ -491,12 +518,7 @@ function WaterPlane(): JSX.Element {
         return <primitive
           object={subdivision.mesh}
           key={subdivision.key}
-          onPointerDown={setCurrentPointer}
-          onPointerMove={setCurrentPointer}
-          onPointerEnter={setCurrentPointer}
-          onPointerUp={clearCurrentPointer}
-          onPointerLeave={clearCurrentPointer}
-          />;
+        />;
       })}
     </group>
   );
