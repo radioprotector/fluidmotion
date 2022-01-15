@@ -89,11 +89,15 @@ fns.handleReady = function() {
   const getZ = fns.getZ;
 
   // First process all pointer events
-  for (let [_, pointerEvent] of state.pendingPointerEvents) {
-    const vertexPositions = state.sourcePositions[pointerEvent.rowIndex][pointerEvent.columnIndex];
+  for (let [/* key */, pointerEvent] of state.pendingPointerEvents) {
+    const sourcePositions = state.sourcePositions[pointerEvent.rowIndex][pointerEvent.columnIndex];
+    const resultPositions = state.resultPositions[pointerEvent.rowIndex][pointerEvent.columnIndex];
 
-    // Map the vertex index * 3 (for x/y/z) and then add 2 more to set the z position
-    vertexPositions[(pointerEvent.vertexIndex * 3) + 2] = state.minVertexDepth;
+    // Set the z-position to the minimum depth at this point
+    fns.setZ(sourcePositions, pointerEvent.vertexIndex, state.minVertexDepth);
+
+    // Maximize the result buffer at this point as well to maximize the amount of "snap"
+    fns.setZ(resultPositions, pointerEvent.vertexIndex, state.maxVertexDepth);
   }
   state.pendingPointerEvents.clear();
 
