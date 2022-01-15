@@ -328,6 +328,7 @@ function WaterPlane(): JSX.Element {
       worker.current.removeEventListener('message', messageHandler);
       worker.current.removeEventListener('error', errorHandler);
       worker.current.terminate();
+      lastWorkerResult.current = null;
     }
   }, []);
 
