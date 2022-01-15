@@ -47,7 +47,7 @@ export const useStore = create<
 
   cycleScaling: () => set(state => {
     // Wrap around
-    if (state.scaling == ScalingMode.ToLargest) {
+    if (state.scaling >= ScalingMode.ToLargest) {
       state.scaling = 0;
     }
     else {
