@@ -299,7 +299,7 @@ function WaterPlane(): JSX.Element {
 
     // Initialize the worker state
     const positionTemplate = new Float32Array(subdivisions.current[0].geometry.getAttribute('position').array);
-    const message: initMessageToWorker = {
+    const initMessage: initMessageToWorker = {
       type: 'init',
       subdivisionRows: SUBDIVISION_ROWS,
       subdivisionColumns: SUBDIVISION_COLUMNS,
@@ -311,10 +311,17 @@ function WaterPlane(): JSX.Element {
       vertexPositionTemplate: positionTemplate
     };
 
-    worker.current.postMessage(message, [positionTemplate.buffer]);
+    worker.current.postMessage(initMessage, [positionTemplate.buffer]);
 
     // Reset the last result
     lastWorkerResult.current = null;
+
+    // Tell the worker to start generating data
+    const readyMessage: readyMessageToWorker = {
+      type: 'ready'
+    };
+
+    worker.current.postMessage(readyMessage);
 
     // Clean up events and terminate the worker
     return () => {
@@ -452,14 +459,14 @@ function WaterPlane(): JSX.Element {
             subdivisionColors.copyArray(newColorArray).needsUpdate = true;
           }
         }
-      }
 
       // Clear the last worker result
       lastWorkerResult.current = null;
 
-      // Signal that we're ready
+        // Signal that we're ready for another result to process
       const readyMessage: readyMessageToWorker = { type: 'ready' };
       worker.current.postMessage(readyMessage);
+      }
 
       // Indicate when we last rendered
       lastRenderTime.current = state.clock.elapsedTime;
