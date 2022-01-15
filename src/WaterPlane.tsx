@@ -179,6 +179,9 @@ function createSubdivisions(totalWidth: number, totalHeight: number): WaterPlane
       const waterGeometry = createWaterPlane(widthPerPlane, heightPerPlane);
       const waterMesh = new Mesh(waterGeometry, WaterMaterial);
 
+      // Disable automated matrix updating - distributeAndScaleSubdivisions will handle this
+      waterMesh.matrixAutoUpdate = false;
+
       // Compute the bounding sphere so we can use this for hit testing later on
       waterGeometry.computeBoundingSphere();
 
@@ -231,6 +234,10 @@ function distributeAndScaleSubdivisions(totalWidth: number, totalHeight: number,
 
     // Apply the scale
     subdivision.mesh.scale.set(scaleToApply, scaleToApply, 1);
+
+    // Update the model matrix
+    subdivision.mesh.updateMatrix();
+    subdivision.mesh.updateMatrixWorld();
   }
 }
 
