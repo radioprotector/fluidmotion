@@ -48,14 +48,14 @@ interface WaterPlaneSubdivision {
  type SubdivisionsByRowCol = WaterPlaneSubdivision[][];
 
 /**
- * The total number of rows to use for each subdivision.
+ * The number of rows in the subdivision grid.
  */
-const SUBDIVISION_ROWS = 3;
+const SUBDIVISION_ROWS = 6;
 
 /**
- * The total number of columns in each subdivision row.
+ * The number of columns in the subdivision grid.
  */
-const SUBDIVISION_COLUMNS = 3;
+const SUBDIVISION_COLUMNS = 6;
 
 /**
  * This controls the overall width of the plane across all subdivisions.
@@ -70,12 +70,12 @@ const TOTAL_PLANE_HEIGHT = 1024;
 /**
  * The number of vertex rows in each plane subdivision.
  */
-const VERTEX_ROWS = 256;
+const VERTEX_ROWS = 128;
 
 /**
  * The number of vertex columns in each plane subdivision.
  */
-const VERTEX_COLUMNS = 256;
+const VERTEX_COLUMNS = 128;
 
 /**
  * The amount to damp the wave each time.
