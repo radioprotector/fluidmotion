@@ -31,17 +31,12 @@ interface WaterPlaneSubdivision {
   /**
    * The geometry in use for the mesh.
    */
-  geometry: BufferGeometry;
+  geometry: BufferGeometry; // XXX: Contemplate removing now that this is mainly handled by the worker.
 
   /**
    * The buffer attribute containing source vertex positions.
    */
-  sourcePositions: BufferAttribute;
-
-  /**
-   * The buffer attribute containing resulting vertex positions after applying propagation logic to the source positions.
-   */
-  resultPositions: BufferAttribute;
+  sourcePositions: BufferAttribute;  // XXX: Contemplate removing now that this is mainly handled by the worker.
 }
 
 /**
@@ -192,8 +187,7 @@ function createSubdivisions(totalWidth: number, totalHeight: number): WaterPlane
         columnIndex: colIdx,
         mesh: waterMesh,
         geometry: waterGeometry,
-        sourcePositions: waterGeometry.attributes.position as BufferAttribute,
-        resultPositions: waterGeometry.attributes.position.clone()
+        sourcePositions: waterGeometry.attributes.position as BufferAttribute
       };
 
       subdivisions.push(subdivision);
