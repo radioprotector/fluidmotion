@@ -359,8 +359,8 @@ function WaterPlane(): JSX.Element {
     };
 
     const errorHandler = (e: ErrorEvent) => {
-      console.error('web worker error', errorHandler);
-    }
+      console.error('web worker error', e);
+    };
 
     // Create the web worker and handlers
     worker.current = new Worker(new URL('./waveWorker.js', import.meta.url));
@@ -562,7 +562,9 @@ function WaterPlane(): JSX.Element {
 
     // See if this is different from what we had last time
     if (lastPlaneScale.current !== scaleFactor) {
-      console.debug(`scaling ${TOTAL_PLANE_WIDTH}x${TOTAL_PLANE_HEIGHT} to ${screenWidth}x${screenHeight} w/ ${scaleFactor.toFixed(2)}`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug(`scaling ${TOTAL_PLANE_WIDTH}x${TOTAL_PLANE_HEIGHT} to ${screenWidth}x${screenHeight} w/ ${scaleFactor.toFixed(2)}`);
+      }
       distributeAndScaleSubdivisions(TOTAL_PLANE_WIDTH, TOTAL_PLANE_HEIGHT, scaleFactor, subdivisions.current);
       lastPlaneScale.current = scaleFactor;
     }
