@@ -1,0 +1,17 @@
+{
+  "files": {
+    "main.css": "/fluidmotion/static/css/main.bc71fb1a.css",
+    "main.js": "/fluidmotion/static/js/main.274549d3.js",
+    "static/js/317.36a39126.chunk.js": "/fluidmotion/static/js/317.36a39126.chunk.js",
+    "static/js/787.0e4ffeb9.chunk.js": "/fluidmotion/static/js/787.0e4ffeb9.chunk.js",
+    "index.html": "/fluidmotion/index.html",
+    "main.bc71fb1a.css.map": "/fluidmotion/static/css/main.bc71fb1a.css.map",
+    "main.274549d3.js.map": "/fluidmotion/static/js/main.274549d3.js.map",
+    "317.36a39126.chunk.js.map": "/fluidmotion/static/js/317.36a39126.chunk.js.map",
+    "787.0e4ffeb9.chunk.js.map": "/fluidmotion/static/js/787.0e4ffeb9.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.bc71fb1a.css",
+    "static/js/main.274549d3.js"
+  ]
+}
