@@ -1,6 +1,15 @@
 {
   "name": "fluidmotion",
   "version": "0.1.0",
+  "description": "A browser-based wave pool simulator, inspired by a Nintendo DS homebrew application of the same name",
+  "homepage": "https://radioprotector.github.io/fluidmotion",
+  "bugs": "https://github.com/radioprotector/fluidmotion/issues",
+  "author": "Cate Stock <radioprotector@users.noreply.github.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/radioprotector/fluidmotion.git"
+  },
   "private": true,
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "^1.2.36",
@@ -15,6 +24,7 @@
     "@types/node": "^16.11.19",
     "@types/react": "^17.0.38",
     "@types/react-dom": "^17.0.11",
+    "env-cmd": "^10.1.0",
     "react": "^17.0.2",
     "react-dom": "^17.0.2",
     "react-scripts": "5.0.0",
@@ -26,6 +36,7 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
+    "start:prod": "env-cmd -f .env.prodlocal react-scripts build && npx serve -s build -l 4000 -n",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
