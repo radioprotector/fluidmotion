@@ -345,9 +345,10 @@ function WaterPlane(): JSX.Element {
     process.env.PUBLIC_URL + '/audio/atmosbasement-01.mp3',
     process.env.PUBLIC_URL + '/audio/atmosbasement-02.mp3',
     process.env.PUBLIC_URL + '/audio/atmosbasement-03.mp3',
-    process.env.PUBLIC_URL + '/audio/atmosbasement-04.mp3',
-    process.env.PUBLIC_URL + '/audio/atmosbasement-05.mp3',
-    process.env.PUBLIC_URL + '/audio/atmosbasement-06.mp3'
+    process.env.PUBLIC_URL + '/audio/atmosbasement-06.mp3',
+    process.env.PUBLIC_URL + '/audio/atmosbasement-07.mp3',
+    process.env.PUBLIC_URL + '/audio/atmosbasement-08.mp3',
+    process.env.PUBLIC_URL + '/audio/atmosbasement-09.mp3'
   ]);
 
   const isAudioEnabled = useRef(useStore.getState().isAudioEnabled);
