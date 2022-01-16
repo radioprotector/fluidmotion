@@ -36,7 +36,7 @@
   },
   "scripts": {
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d build",
+    "deploy": "npx gh-pages -d build",
     "start": "react-scripts start",
     "build": "react-scripts build",
     "start:prod": "env-cmd -f .env.prodlocal react-scripts build && npx serve -s build -l 4000 -n",
