@@ -26,7 +26,7 @@ export enum ScalingMode {
 /**
  * Describes the frequency, in seconds, at which rain will fall for the given stage index.
  */
-const rainFrequencyStages = [0, 0.15, 0.5, 1, 1.5];
+export const rainFrequencyStages = [0, 0.15, 0.5, 1, 1.5];
 
 interface MotionState {
   /**
@@ -36,9 +36,13 @@ interface MotionState {
 
   /**
    * The duration, in seconds, between rainfall instances.
+   * Derived from the rainFrequencyStages constant and the rainFrequencyStageIndex state field.
    */
   rainFrequencySeconds: number;
 
+  /**
+   * The index of the current rain frequency stage.
+   */
   rainFrequencyStageIndex: number;
 
   /**
@@ -46,18 +50,39 @@ interface MotionState {
    */
   lastResetTime: number;
 
+  /**
+   * Whether or not audio is enabled.
+   */
   isAudioEnabled: boolean,
 
+  /**
+   * Explicitly sets the scaling mode.
+   */
   setScaling: (newScaling: ScalingMode) => void;
 
+  /**
+   * Cycles between scaling modes.
+   */
   cycleScaling: () => void;
 
+  /**
+   * Explicitly sets the current rain stage to the specified index.
+   */
   setRainStage: (newStageIndex: number) => void;
 
+  /**
+   * Cycles between rain stages.
+   */
   cycleRainStage: () => void;
 
+  /**
+   * Initiates a reset of the water plane to "blank" it out.
+   */
   initiateReset: () => void;
 
+  /**
+   * Toggles whether rain-based audio should be playing.
+   */
   toggleAudioEnabled: () => void;
 }
 
