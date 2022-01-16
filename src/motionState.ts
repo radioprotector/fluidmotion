@@ -46,6 +46,8 @@ interface MotionState {
    */
   lastResetTime: number;
 
+  isAudioEnabled: boolean,
+
   setScaling: (newScaling: ScalingMode) => void;
 
   cycleScaling: () => void;
@@ -55,6 +57,8 @@ interface MotionState {
   cycleRainStage: () => void;
 
   initiateReset: () => void;
+
+  toggleAudioEnabled: () => void;
 }
 
 export const useStore = create<
@@ -67,6 +71,7 @@ export const useStore = create<
   rainFrequencySeconds: 0,
   rainFrequencyStageIndex: 0,
   lastResetTime: 0,
+  isAudioEnabled: false as boolean,
 
   setScaling: (newScaling) => set(state => { 
     state.scaling = newScaling;
@@ -107,5 +112,9 @@ export const useStore = create<
 
   initiateReset: () => set(state => {
     state.lastResetTime = Date.now();
+  }),
+
+  toggleAudioEnabled: () => set(state => {
+    state.isAudioEnabled = !state.isAudioEnabled;
   })
 })));

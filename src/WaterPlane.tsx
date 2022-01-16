@@ -1,6 +1,6 @@
 import { useRef, useMemo, useEffect } from "react";
-import { useFrame, useThree } from "@react-three/fiber";
-import { Mesh, PlaneGeometry, BufferGeometry, BufferAttribute, MathUtils, Color, MeshBasicMaterial, Vector2, Raycaster, Intersection, PerspectiveCamera } from "three";
+import { useFrame, useLoader, useThree } from "@react-three/fiber";
+import { Mesh, PlaneGeometry, BufferGeometry, BufferAttribute, MathUtils, Color, MeshBasicMaterial, Vector2, Raycaster, Intersection, PerspectiveCamera, AudioLoader, Audio, PositionalAudio, AudioListener } from "three";
 
 import { ScalingMode, useStore } from './motionState';
 
@@ -285,7 +285,23 @@ function findNearestVertex(subdivision: WaterPlaneSubdivision, intersection: Int
   return nearestVertexIdx;
 }
 
+function constructAudioQueue(listener: AudioListener) {
+  const audios = [];
+
+  for(let audioIdx = 0; audioIdx < 15; audioIdx++) {
+    const audio = new Audio(listener);
+    audio.loop = false;
+    audios.push(audio);
+  }
+
+  return audios;
+}
+
 function WaterPlane(): JSX.Element {
+  const camera = useThree((state) => state.camera);
+  const cameraAspect = useThree((state) => (state.camera as PerspectiveCamera).aspect);
+  const cameraFov = useThree((state) => (state.camera as PerspectiveCamera).fov);
+
   // Track the last scale that was used
   const lastPlaneScale = useRef(1);
 
@@ -312,6 +328,34 @@ function WaterPlane(): JSX.Element {
   const pointerVertexIndex = useRef(-1);
   const pointerLastFiredTime = useRef(0);
   const POINTER_DEBOUNCE_SECONDS = 1/30;
+
+  // Track audio
+  const audioListener = useRef<AudioListener>(new AudioListener());
+  const positionalAudioQueue = useRef<Audio[]>(constructAudioQueue(audioListener.current));
+  const nextPositionalAudioIndex = useRef(0);
+  const rainSounds = useLoader(AudioLoader, [
+    process.env.PUBLIC_URL + '/audio/atmosbasement-01.mp3',
+    process.env.PUBLIC_URL + '/audio/atmosbasement-02.mp3',
+    process.env.PUBLIC_URL + '/audio/atmosbasement-03.mp3',
+    process.env.PUBLIC_URL + '/audio/atmosbasement-04.mp3',
+    process.env.PUBLIC_URL + '/audio/atmosbasement-05.mp3',
+    process.env.PUBLIC_URL + '/audio/atmosbasement-06.mp3'
+  ]);
+
+  const isAudioEnabled = useRef(useStore.getState().isAudioEnabled);
+
+  useEffect(() => useStore.subscribe(
+    state => (isAudioEnabled.current = state.isAudioEnabled)
+  ), []);
+
+  useEffect(() => {
+    camera.add(audioListener.current);
+    audioListener.current.position.set(0, 0, PLANE_DEPTH);
+
+    return () => {
+      camera.remove(audioListener.current);
+    };
+  }, [camera])
 
   // Build subdivisions, using a ref to maintain the geometry between refreshes
   const subdivisions = useRef(createSubdivisions(TOTAL_PLANE_WIDTH, TOTAL_PLANE_HEIGHT));
@@ -418,10 +462,6 @@ function WaterPlane(): JSX.Element {
   }, []);
 
   // Manually handle our own touch handling, since this is otherwise a huge drag on performance
-  const camera = useThree((state) => state.camera);
-  const cameraAspect = useThree((state) => (state.camera as PerspectiveCamera).aspect);
-  const cameraFov = useThree((state) => (state.camera as PerspectiveCamera).fov);
-
   useEffect(() => {
     const raycaster = new Raycaster();
     const raycasterPointer = new Vector2();
@@ -521,6 +561,7 @@ function WaterPlane(): JSX.Element {
       const randomRowIndex = Math.floor(Math.random() * SUBDIVISION_ROWS);
       const randomColumnIndex = Math.floor(Math.random() * SUBDIVISION_COLUMNS);
       const randomVertexIndex = Math.floor(Math.random() * VERTEX_COUNT);
+      const randomSoundIndex = Math.floor(Math.random() * rainSounds.length);
 
       // Treat this like a regular pointer effect
       const message: pointerMessageToWorker = {
@@ -531,6 +572,25 @@ function WaterPlane(): JSX.Element {
       }
 
       worker.current.postMessage(message);
+
+      // Play a sound if enabled
+      if (isAudioEnabled.current) {
+        const subdivision = subdivisionsByRowCol[randomRowIndex][randomColumnIndex];
+        const rainAudio = positionalAudioQueue.current[nextPositionalAudioIndex.current];
+
+        rainAudio.setBuffer(rainSounds[randomSoundIndex]);
+        rainAudio.position.set(
+          subdivision.mesh.position.x + (subdivision.mesh.geometry.getAttribute('position').getX(randomVertexIndex) * subdivision.mesh.scale.x),
+          subdivision.mesh.position.y + (subdivision.mesh.geometry.getAttribute('position').getY(randomVertexIndex) * subdivision.mesh.scale.y),
+          PLANE_DEPTH);
+
+        rainAudio.playbackRate = 0.95 + (Math.random() / 10);
+        rainAudio.detune = -100 + Math.floor(Math.random() * 200);
+        rainAudio.play();
+
+        nextPositionalAudioIndex.current = (nextPositionalAudioIndex.current + 1) % positionalAudioQueue.current.length;
+      }
+
       lastRainTime.current = state.clock.elapsedTime;
     }
 

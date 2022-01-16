@@ -5,9 +5,9 @@ import App from './App';
 import reportWebVitals from './reportWebVitals';
 
 import { library } from '@fortawesome/fontawesome-svg-core';
-import { faSun, faCloudSun, faCloudSunRain, faCloudRain, faCloudShowersHeavy, faCompressAlt, faExpandAlt, faExpand, faEraser } from '@fortawesome/free-solid-svg-icons';
+import { faSun, faCloudSun, faCloudSunRain, faCloudRain, faCloudShowersHeavy, faTint, faCompressAlt, faExpandAlt, faExpand, faEraser, faVolumeUp, faVolumeMute } from '@fortawesome/free-solid-svg-icons';
 
-library.add(faSun, faCloudSun, faCloudSunRain, faCloudRain, faCloudShowersHeavy, faCompressAlt, faExpandAlt, faExpand, faEraser);
+library.add(faSun, faCloudSun, faCloudSunRain, faCloudRain, faCloudShowersHeavy, faTint, faCompressAlt, faExpandAlt, faExpand, faEraser, faVolumeUp, faVolumeMute);
 
 ReactDOM.render(
   <React.StrictMode>

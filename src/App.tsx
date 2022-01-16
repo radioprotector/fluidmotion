@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Stats } from '@react-three/drei';
 
@@ -8,10 +9,12 @@ import InterfaceControls from './InterfaceControls';
 function App(): JSX.Element {
   return (
     <div id="canvas-container">
-      <Canvas gl={{alpha: false, antialias: false}}>
-        <WaterPlane />
-      </Canvas>
-      <InterfaceControls />
+      <Suspense fallback={null}>
+        <Canvas>
+          <WaterPlane />
+        </Canvas>
+        <InterfaceControls />
+      </Suspense>
       {/* Only include stats in development */}
       {
         process.env.NODE_ENV !== 'production'
