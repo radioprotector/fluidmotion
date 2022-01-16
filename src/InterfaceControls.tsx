@@ -46,17 +46,24 @@ function InterfaceControls(): JSX.Element {
 
   return (
     <div id="control-items">
+      {/**
+        * Because this is using flex row-reverse order, the items that show up first will be on the far right. 
+        */}
       <button
         type="button"
-        title="Toggle rain"
-        onClick={(e) => { cycleRain(); e.stopPropagation(); return false; }}
+        title={scaleModeText}
+        onClick={(e) => { cycleScale(); e.stopPropagation(); return false; }}
       >
-        {/* Index 0 is "off", but it's otherwise in descending order of intensity */}
-        {rainStage === 0 && <FontAwesomeIcon fixedWidth={true} icon="sun" />}
-        {rainStage === 1 && <FontAwesomeIcon fixedWidth={true} icon="cloud-showers-heavy" />}
-        {rainStage === 2 && <FontAwesomeIcon fixedWidth={true} icon="cloud-rain" />}
-        {rainStage === 3 && <FontAwesomeIcon fixedWidth={true} icon="cloud-sun-rain" />}
-        {rainStage === 4 && <FontAwesomeIcon fixedWidth={true} icon="cloud-sun" />}
+        {scaleMode === ScalingMode.None && <FontAwesomeIcon fixedWidth={true} icon="expand" />}
+        {scaleMode === ScalingMode.ScaleToFitSmaller && <FontAwesomeIcon fixedWidth={true} icon="compress-alt" />}
+        {scaleMode === ScalingMode.ScaleToFitLarger && <FontAwesomeIcon fixedWidth={true} icon="expand-alt" />}
+      </button>
+      <button
+        type="button"
+        title="Reset"
+        onClick={(e) => { initiateReset(); e.stopPropagation(); return false; }}
+      >
+        <FontAwesomeIcon fixedWidth={true} icon="eraser" />
       </button>
       <button
         type="button"
@@ -70,22 +77,18 @@ function InterfaceControls(): JSX.Element {
           {audioEnabled && <FontAwesomeIcon icon="volume-mute" transform="shrink-5 right-6" />}
           {!audioEnabled && <FontAwesomeIcon icon="volume-up" transform="shrink-5 right-6" />}
         </span>
-      </button>      
-      <button
-        type="button"
-        title="Reset"
-        onClick={(e) => { initiateReset(); e.stopPropagation(); return false; }}
-      >
-        <FontAwesomeIcon fixedWidth={true} icon="eraser" />
       </button>
       <button
         type="button"
-        title={scaleModeText}
-        onClick={(e) => { cycleScale(); e.stopPropagation(); return false; }}
+        title="Toggle rain"
+        onClick={(e) => { cycleRain(); e.stopPropagation(); return false; }}
       >
-        {scaleMode === ScalingMode.None && <FontAwesomeIcon fixedWidth={true} icon="expand" />}
-        {scaleMode === ScalingMode.ScaleToFitSmaller && <FontAwesomeIcon fixedWidth={true} icon="compress-alt" />}
-        {scaleMode === ScalingMode.ScaleToFitLarger && <FontAwesomeIcon fixedWidth={true} icon="expand-alt" />}
+        {/* Index 0 is "off", but it's otherwise in descending order of intensity */}
+        {rainStage === 0 && <FontAwesomeIcon fixedWidth={true} icon="sun" />}
+        {rainStage === 1 && <FontAwesomeIcon fixedWidth={true} icon="cloud-showers-heavy" />}
+        {rainStage === 2 && <FontAwesomeIcon fixedWidth={true} icon="cloud-rain" />}
+        {rainStage === 3 && <FontAwesomeIcon fixedWidth={true} icon="cloud-sun-rain" />}
+        {rainStage === 4 && <FontAwesomeIcon fixedWidth={true} icon="cloud-sun" />}
       </button>
     </div>
   );
