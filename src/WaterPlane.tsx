@@ -1,6 +1,6 @@
 import { useRef, useMemo, useEffect } from "react";
 import { useFrame, useLoader, useThree } from "@react-three/fiber";
-import { Mesh, PlaneGeometry, BufferGeometry, BufferAttribute, MathUtils, Color, MeshBasicMaterial, Vector2, Raycaster, Intersection, PerspectiveCamera, AudioLoader, Audio, PositionalAudio, AudioListener } from "three";
+import { Mesh, PlaneGeometry, BufferGeometry, BufferAttribute, MathUtils, Color, MeshBasicMaterial, Vector2, Raycaster, Intersection, PerspectiveCamera, AudioLoader, PositionalAudio, AudioListener } from "three";
 
 import { ScalingMode, useStore } from './motionState';
 
@@ -285,13 +285,21 @@ function findNearestVertex(subdivision: WaterPlaneSubdivision, intersection: Int
   return nearestVertexIdx;
 }
 
-function constructAudioQueue(listener: AudioListener) {
+/**
+ * Creates a queue of positional audio elements for use in playback.
+ * @param listener The audio listener to use as a parent of each element.
+ * @returns The initialized audio queue.
+ */
+function constructAudioQueue(listener: AudioListener): PositionalAudio[] {
   const audios = [];
 
   for(let audioIdx = 0; audioIdx < 15; audioIdx++) {
-    const audio = new Audio(listener);
+    const audio = new PositionalAudio(listener);
+    audio.setRefDistance(20);
     audio.loop = false;
     audios.push(audio);
+
+    listener.add(audio);
   }
 
   return audios;
@@ -331,7 +339,7 @@ function WaterPlane(): JSX.Element {
 
   // Track audio
   const audioListener = useRef<AudioListener>(new AudioListener());
-  const positionalAudioQueue = useRef<Audio[]>(constructAudioQueue(audioListener.current));
+  const positionalAudioQueue = useRef<PositionalAudio[]>(constructAudioQueue(audioListener.current));
   const nextPositionalAudioIndex = useRef(0);
   const rainSounds = useLoader(AudioLoader, [
     process.env.PUBLIC_URL + '/audio/atmosbasement-01.mp3',
@@ -349,11 +357,12 @@ function WaterPlane(): JSX.Element {
   ), []);
 
   useEffect(() => {
-    camera.add(audioListener.current);
-    audioListener.current.position.set(0, 0, PLANE_DEPTH);
+    const currentListener = audioListener.current;
+    camera.add(currentListener);
+    currentListener.position.set(0, 0, PLANE_DEPTH);
 
     return () => {
-      camera.remove(audioListener.current);
+      camera.remove(currentListener);
     };
   }, [camera])
 
@@ -480,8 +489,8 @@ function WaterPlane(): JSX.Element {
         const targetElem = e.target as Element;
 
         if (targetElem.nodeName === 'BUTTON' || targetElem.nodeName === 'svg' || targetElem.nodeName === 'path') {
-        return;
-      }
+          return;
+        }
       }
 
       // Normalize pointer coordinates to be in the [-1, 1] range expected by the raycaster.
@@ -584,8 +593,9 @@ function WaterPlane(): JSX.Element {
           subdivision.mesh.position.y + (subdivision.mesh.geometry.getAttribute('position').getY(randomVertexIndex) * subdivision.mesh.scale.y),
           PLANE_DEPTH);
 
+        // Randomly skew the playback rate (5% in either direction) and detune amount (1 octave in either direction)
         rainAudio.playbackRate = 0.95 + (Math.random() / 10);
-        rainAudio.detune = -100 + Math.floor(Math.random() * 200);
+        rainAudio.detune = -1200 + Math.floor(Math.random() * 2400);
         rainAudio.play();
 
         nextPositionalAudioIndex.current = (nextPositionalAudioIndex.current + 1) % positionalAudioQueue.current.length;
