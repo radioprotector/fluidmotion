@@ -6,8 +6,8 @@ This project is implemented using the following libraries:
 
 - [React](https://reactjs.org/)
 - [three.js](https://threejs.org/)
-- [react-three-fiber](https://docs.pmnd.rs/react-three-fiber/getting-started/introduction)
-- [zustand](https://docs.pmnd.rs/zustand/introduction)
+- [react-three-fiber](https://docs.pmnd.rs/react-three-fiber)
+- [zustand](https://docs.pmnd.rs/zustand)
 
 This project is written in TypeScript and makes use of [the Hooks API](https://reactjs.org/docs/hooks-intro.html). All primary components use the [functional component style](https://reactjs.org/docs/components-and-props.html#function-and-class-components). It was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
@@ -27,7 +27,7 @@ Eventually, that did not prove sufficient either, and so manual raycasting was i
 
 ### Web Worker Use
 
-However, even with subdivisions in place and an updated hit testing algorithm, the greater number of vertices to process ultimately became untenable to accomplish in the main UI thread. With that in mind, the wave propagation mechanism was implemented in a separate `waveWorker.js` web worker. The messages sent to and received from the web worker are documented in the `workerInterface.ts` class.
+However, even with subdivisions in place and an updated hit testing algorithm, the greater number of vertices to process ultimately became untenable to accomplish in the main UI thread. With that in mind, the wave propagation mechanism was implemented in a separate `waveWorker.js` web worker. The messages sent to and received from the web worker are documented in the `workerInterface.ts` file.
 
 After initialization, the web worker will perform wave propagations on arrays of vertex positions and calculate the corresponding vertex color arrays. Not only does this closely match with the underlying implementation of position and color [`BufferAttributes`](https://threejs.org/docs/api/en/core/BufferAttribute), but the resulting arrays are [transferable across message boundaries](https://developer.mozilla.org/en-US/docs/Glossary/Transferable_objects).
 
