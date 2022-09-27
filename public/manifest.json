@@ -1,6 +1,6 @@
 {
   "short_name": "fluidmotion",
-  "name": "fluidmotion",
+  "name": "fluidmotion - a browser-based wave pool simulator",
   "icons": [
     {
       "src": "favicon.ico",
